@@ -13,9 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
-# -----------------------------------------------------------
-# SOZLAMALAR
-# -----------------------------------------------------------
+# --- SOZLAMALAR ---
 TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
 ADMIN_ID = 7950261926 
 
@@ -23,405 +21,300 @@ dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
-# -----------------------------------------------------------
-# TILLAR VA MATNLAR (LOCALIZATION)
-# -----------------------------------------------------------
-LANGUAGES = {
-    "uz": "🇺🇿 O'zbekcha",
-    "ru": "🇷🇺 Русский",
-    "en": "🇬🇧 English"
-}
-
+# --- MATNLAR (SKRINSHOTDAGI AYNAN O'SHA MATNLAR) ---
 TEXTS = {
     "uz": {
-        "welcome": "👋 <b>Assalomu alaykum!</b>\n\nMen orqali <b>Instagram, TikTok, YouTube</b> dan video va audio yuklashingiz mumkin.\n\n🎵 <b>Musiqa qidirish uchun shunchaki nomini yozing!</b>\n\nBuyruqlar:\n/top - Eng zo'r musiqalar\n/new - Yangi musiqalar\n/lang - Tilni o'zgartirish",
+        "welcome": (
+            "<b>Assalomu alaykum. @MeningBotim ga Xush kelibsiz.</b>\n"
+            "Bot orqali quyidagilarni yuklab olishingiz mumkin:\n\n"
+            "• <b>Instagram</b> - post va IGTV + audio bilan;\n"
+            "• <b>TikTok</b> - suv belgisiz video + audio bilan;\n"
+            "• <b>YouTube</b> - videolar va shorts + audio bilan;\n"
+            "• <b>Snapchat</b> - suv belgisiz video + audio bilan;\n"
+            "• <b>Likee</b> - suv belgisiz video + audio bilan;\n"
+            "• <b>Pinterest</b> - suv belgisiz video va rasmlar + audio bilan;\n\n"
+            "<b>Shazam funksiya:</b>\n"
+            "• Qo‘shiq nomi yoki ijrochi ismi\n"
+            "• Qo‘shiq matni\n"
+            "• Ovozli xabar\n"
+            "• Video\n"
+            "• Audio\n"
+            "• Video xabar\n\n"
+            "🚀 <b>Yuklab olmoqchi bo'lgan videoga havolani yuboring!</b>\n"
+            "<i>(Yoki shunchaki qo'shiq nomini yozing)</i>"
+        ),
         "search": "🔍 <b>Qidirilmoqda...</b>",
-        "not_found": "❌ Hech narsa topilmadi.",
+        "not_found": "⚠️ <b>Afsuski musiqa topilmadi.</b>\nAniqroq yozib ko'ring.",
         "downloading": "⏳ <b>Yuklanmoqda...</b>",
         "sending": "📤 <b>Yuborilmoqda...</b>",
-        "error": "❌ Xatolik yuz berdi.",
         "sub_check": "⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:",
-        "sub_btn": "➕ A'zo bo'lish",
-        "verify": "✅ Tasdiqlash",
-        "choose_format": "Formatni tanlang:",
-        "video": "🎬 Video",
+        "btn_sub": "➕ A'zo bo'lish",
+        "btn_verify": "✅ Tasdiqlash",
+        "choose": "Formatni tanlang:",
+        "video": "📹 Video",
         "audio": "🎵 Audio (MP3)",
-        "results": "👇 Natijalar:",
-        "top_title": "🔥 <b>TOP Musiqalar (Trend):</b>",
-        "new_title": "🆕 <b>Yangi Musiqalar:</b>",
-        "lang_choose": "Tilni tanlang / Выберите язык:",
+        "top_title": "🔥 <b>TOP Chart (Trend):</b>",
+        "new_title": "🆕 <b>Yangi Xitlar:</b>",
         "lang_set": "✅ Til o'zgartirildi: O'zbekcha"
     },
     "ru": {
-        "welcome": "👋 <b>Привет!</b>\n\nЧерез меня можно скачать видео и аудио с <b>Instagram, TikTok, YouTube</b>.\n\n🎵 <b>Просто напишите название песни для поиска!</b>\n\nКоманды:\n/top - Топ музыка\n/new - Новинки\n/lang - Сменить язык",
+        "welcome": (
+            "<b>Приветствую! Добро пожаловать в @MeningBotim.</b>\n"
+            "Через бота можно скачать:\n\n"
+            "• <b>Instagram</b> - посты, IGTV + аудио;\n"
+            "• <b>TikTok</b> - видео без водяных знаков + аудио;\n"
+            "• <b>YouTube</b> - видео и шортс + аудио;\n"
+            "• <b>Pinterest, Likee, Snapchat</b> - контент без водяных знаков;\n\n"
+            "<b>Функция Shazam:</b>\n"
+            "• Поиск по названию или исполнителю\n"
+            "• Поиск по тексту песни\n"
+            "• Голосовые сообщения\n\n"
+            "🚀 <b>Отправьте ссылку на видео для скачивания!</b>\n"
+            "<i>(Или просто напишите название песни)</i>"
+        ),
         "search": "🔍 <b>Поиск...</b>",
-        "not_found": "❌ Ничего не найдено.",
+        "not_found": "⚠️ <b>Музыка не найдена.</b>",
         "downloading": "⏳ <b>Загрузка...</b>",
         "sending": "📤 <b>Отправка...</b>",
-        "error": "❌ Произошла ошибка.",
         "sub_check": "⚠️ Подпишитесь на канал:",
-        "sub_btn": "➕ Подписаться",
-        "verify": "✅ Проверить",
-        "choose_format": "Выберите формат:",
-        "video": "🎬 Видео",
+        "btn_sub": "➕ Подписаться",
+        "btn_verify": "✅ Проверить",
+        "choose": "Выберите формат:",
+        "video": "📹 Видео",
         "audio": "🎵 Аудио (MP3)",
-        "results": "👇 Результаты:",
-        "top_title": "🔥 <b>TOP Музыка (Тренд):</b>",
+        "top_title": "🔥 <b>ТОП Чарт (Тренд):</b>",
         "new_title": "🆕 <b>Новинки:</b>",
-        "lang_choose": "Выберите язык / Tilni tanlang:",
         "lang_set": "✅ Язык изменен: Русский"
-    },
-    "en": {
-        "welcome": "👋 <b>Hello!</b>\n\nDownload video/audio from <b>Instagram, TikTok, YouTube</b>.\n\n🎵 <b>Just type the song name to search!</b>\n\nCommands:\n/top - Top Songs\n/new - New Songs\n/lang - Change Language",
-        "search": "🔍 <b>Searching...</b>",
-        "not_found": "❌ Nothing found.",
-        "downloading": "⏳ <b>Downloading...</b>",
-        "sending": "📤 <b>Sending...</b>",
-        "error": "❌ Error occurred.",
-        "sub_check": "⚠️ Please join channel:",
-        "sub_btn": "➕ Join",
-        "verify": "✅ Verify",
-        "choose_format": "Choose format:",
-        "video": "🎬 Video",
-        "audio": "🎵 Audio (MP3)",
-        "results": "👇 Results:",
-        "top_title": "🔥 <b>TOP Songs (Trend):</b>",
-        "new_title": "🆕 <b>New Songs:</b>",
-        "lang_choose": "Choose language:",
-        "lang_set": "✅ Language set: English"
     }
 }
 
-# -----------------------------------------------------------
-# BAZA (Foydalanuvchi + Til)
-# -----------------------------------------------------------
+# --- BAZA ---
 def db_start():
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
-    # Til ustuni (lang) qo'shildi
     cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, lang TEXT DEFAULT 'uz')")
     cur.execute("CREATE TABLE IF NOT EXISTS channels (link TEXT, id TEXT)")
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
 
 def add_user(user_id):
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("INSERT OR IGNORE INTO users (user_id, lang) VALUES (?, 'uz')", (user_id,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
 
-def get_user_lang(user_id):
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,))
-    res = cur.fetchone()
-    conn.close()
-    return res[0] if res else "uz"
+def get_lang(user_id):
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("SELECT lang FROM users WHERE user_id=?", (user_id,))
+    r = cur.fetchone(); conn.close()
+    return r[0] if r else "uz"
 
-def set_user_lang(user_id, lang):
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET lang = ? WHERE user_id = ?", (lang, user_id))
-    conn.commit()
-    conn.close()
+def set_lang(user_id, lang):
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("UPDATE users SET lang=? WHERE user_id=?", (lang, user_id))
+    conn.commit(); conn.close()
 
-# Kanal funksiyalari (Oldingidek)
-def get_users_count():
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM users")
-    return cur.fetchone()[0]
+# Kanal funksiyalari
+def get_channels():
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("SELECT * FROM channels"); r = cur.fetchall(); conn.close(); return r
+def add_channel(link, ch_id):
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("INSERT INTO channels VALUES (?, ?)", (link, ch_id)); conn.commit(); conn.close()
+def del_channel(ch_id):
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("DELETE FROM channels WHERE id=?", (ch_id,)); conn.commit(); conn.close()
 
-def get_all_users():
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("SELECT user_id FROM users")
-    return [user[0] for user in cur.fetchall()]
-
-def add_channel_db(link, ch_id):
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("INSERT INTO channels VALUES (?, ?)", (link, ch_id))
-    conn.commit()
-    conn.close()
-
-def del_channel_db(ch_id):
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("DELETE FROM channels WHERE id = ?", (ch_id,))
-    conn.commit()
-    conn.close()
-
-def get_channels_db():
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM channels")
-    return cur.fetchall()
-
-# -----------------------------------------------------------
-# MANTIQ (YUKLASH VA QIDIRISH)
-# -----------------------------------------------------------
+# --- MANTIQ ---
 class AdminState(StatesGroup):
-    broadcast = State()
     add_ch_link = State()
-    add_ch_id = State()
 
-async def check_sub_status(bot: Bot, user_id: int):
+async def check_sub(bot, user_id):
     if user_id == ADMIN_ID: return []
-    channels = get_channels_db()
-    not_subbed = []
-    for link, ch_id in channels:
+    ch = get_channels()
+    not_sub = []
+    for l, i in ch:
         try:
-            member = await bot.get_chat_member(chat_id=ch_id, user_id=user_id)
-            if member.status in ['left', 'kicked']:
-                not_subbed.append((link, ch_id))
-        except: continue
-    return not_subbed
+            m = await bot.get_chat_member(i, user_id)
+            if m.status in ['left', 'kicked']: not_sub.append((l, i))
+        except: pass
+    return not_sub
 
-# --- SUPER YUKLASH FUNKSIYASI ---
-async def download_media(url, user_id, type="video"):
+# SUPER DOWNLOADER
+async def dl_media(url, user_id, type="video"):
     ext = "mp4" if type == "video" else "mp3"
-    file_name = f"{DOWNLOAD_PATH}/{user_id}_media.{ext}"
-    cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
+    fn = f"{DOWNLOAD_PATH}/{user_id}.{ext}"
+    cf = 'cookies.txt' if os.path.exists('cookies.txt') else None
     
-    ydl_opts = {
-        'outtmpl': file_name,
-        'noplaylist': True,
-        'quiet': True,
-        'cookiefile': cookie_file,
-        # Brauzer ekanligini bildirish uchun (Blockni aylanib o'tish)
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-        }
+    opts = {
+        'outtmpl': fn, 'quiet': True, 'noplaylist': True, 'cookiefile': cf,
+        'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     }
-
-    if type == "audio":
-        ydl_opts['format'] = 'bestaudio/best'
-    else:
-        ydl_opts['format'] = 'bestvideo+bestaudio/best' # Eng yaxshi sifat
-
+    if type == "audio": opts['format'] = 'bestaudio/best'
+    else: opts['format'] = 'bestvideo+bestaudio/best'
+    
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            return file_name, info.get('title', 'Media')
-    except Exception as e:
-        print(f"Error: {e}")
-        return None, None
+            return fn, info.get('title', 'Media')
+    except: return None, None
 
-async def search_music_yt(query, limit=10):
-    cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
-    ydl_opts = {
-        'quiet': True,
-        'cookiefile': cookie_file,
-        'noplaylist': True,
-        'extract_flat': True,
-        'default_search': f'ytsearch{limit}',
-        'http_headers': {'User-Agent': 'Mozilla/5.0'}
-    }
+async def search_yt(q, limit=10):
+    cf = 'cookies.txt' if os.path.exists('cookies.txt') else None
+    opts = {'quiet': True, 'cookiefile': cf, 'noplaylist': True, 'extract_flat': True, 'default_search': f'ytsearch{limit}'}
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-            if 'entries' in info: return info['entries']
-    except: pass
-    return []
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            res = ydl.extract_info(f"ytsearch{limit}:{q}", download=False)
+            return res.get('entries', [])
+    except: return []
 
-# -----------------------------------------------------------
-# HANDLERS
-# -----------------------------------------------------------
-
-# START (/start)
+# --- HANDLERS ---
 @dp.message(CommandStart())
-async def start_handler(message: Message, bot: Bot):
-    add_user(message.from_user.id)
-    lang = get_user_lang(message.from_user.id)
+async def start(m: Message, bot: Bot):
+    add_user(m.from_user.id)
+    l = get_lang(m.from_user.id)
     
-    not_subbed = await check_sub_status(bot, message.from_user.id)
-    if not_subbed:
-        kb = [[InlineKeyboardButton(text=TEXTS[lang]["sub_btn"], url=l)] for l, _ in not_subbed]
-        kb.append([InlineKeyboardButton(text=TEXTS[lang]["verify"], callback_data="check_sub")])
-        await message.answer(TEXTS[lang]["sub_check"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    else:
-        # Menyu buyruqlarini o'rnatish
-        await bot.set_my_commands([
-            BotCommand(command="start", description="Restart"),
-            BotCommand(command="top", description="Top 10 Music"),
-            BotCommand(command="new", description="New Songs"),
-            BotCommand(command="lang", description="Change Language"),
-        ])
-        await message.answer(TEXTS[lang]["welcome"])
+    ns = await check_sub(bot, m.from_user.id)
+    if ns:
+        kb = [[InlineKeyboardButton(text=TEXTS[l]["btn_sub"], url=x[0])] for x in ns]
+        kb.append([InlineKeyboardButton(text=TEXTS[l]["btn_verify"], callback_data="check")])
+        return await m.answer(TEXTS[l]["sub_check"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Restart"),
+        BotCommand(command="top", description="Top Music"),
+        BotCommand(command="new", description="New Music"),
+        BotCommand(command="lang", description="Language/Til"),
+    ])
+    await m.answer(TEXTS[l]["welcome"], disable_web_page_preview=True)
 
-# TIL O'ZGARTIRISH (/lang)
 @dp.message(Command("lang"))
-async def lang_handler(message: Message):
-    kb = [
-        [InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="lang:uz")],
-        [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru")],
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en")]
-    ]
-    await message.answer("👇", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+async def lang_h(m: Message):
+    kb = [[InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="lang:uz"), InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru")]]
+    await m.answer("👇", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data.startswith("lang:"))
-async def set_lang_call(call: CallbackQuery):
-    lang_code = call.data.split(":")[1]
-    set_user_lang(call.from_user.id, lang_code)
-    await call.message.delete()
-    await call.message.answer(TEXTS[lang_code]["lang_set"])
-    # Start xabarini yangi tilda chiqarish
-    await start_handler(call.message, call.bot) 
+async def set_l(c: CallbackQuery):
+    l = c.data.split(":")[1]
+    set_lang(c.from_user.id, l)
+    await c.message.delete()
+    await c.message.answer(TEXTS[l]["lang_set"])
+    await start(c.message, c.bot)
 
-# TOP VA NEW MUSIQA (/top, /new)
+@dp.callback_query(F.data == "check")
+async def check_c(c: CallbackQuery, bot: Bot):
+    if await check_sub(bot, c.from_user.id): await c.answer("❌", show_alert=True)
+    else: await c.message.delete(); await start(c.message, bot)
+
+# TOP & NEW
 @dp.message(Command("top"))
-async def top_music(message: Message):
-    lang = get_user_lang(message.from_user.id)
-    await message.answer(TEXTS[lang]["search"])
-    # "Top music 2025" deb qidiradi
-    results = await search_music_yt("Global Top 10 Music 2025", limit=10)
-    await show_search_results(message, results, TEXTS[lang]["top_title"])
+async def top_m(m: Message):
+    l = get_lang(m.from_user.id)
+    await m.answer(TEXTS[l]["search"])
+    res = await search_yt("Global Top Hits 2025", 10)
+    await show_res(m, res, TEXTS[l]["top_title"])
 
 @dp.message(Command("new"))
-async def new_music(message: Message):
-    lang = get_user_lang(message.from_user.id)
-    await message.answer(TEXTS[lang]["search"])
-    # "New songs 2025" deb qidiradi
-    results = await search_music_yt("New Songs 2025 Hits", limit=10)
-    await show_search_results(message, results, TEXTS[lang]["new_title"])
+async def new_m(m: Message):
+    l = get_lang(m.from_user.id)
+    await m.answer(TEXTS[l]["search"])
+    res = await search_yt("New Songs 2025", 10)
+    await show_res(m, res, TEXTS[l]["new_title"])
 
-# NATIJALARNI CHIQARISH (YORDAMCHI)
-async def show_search_results(message: Message, results, title):
-    if not results:
-        await message.edit_text("❌")
-        return
-    
+async def show_res(m, res, title):
+    if not res: return await m.answer("❌")
     kb = []
-    for video in results:
-        t = video.get('title', 'Track')
-        vid = video.get('id')
-        kb.append([InlineKeyboardButton(text=f"🎵 {t[:35]}...", callback_data=f"music:{vid}")])
-    
-    kb.append([InlineKeyboardButton(text="❌", callback_data="del_msg")])
-    await message.answer(title, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    for v in res: kb.append([InlineKeyboardButton(text=f"🎵 {v['title'][:30]}", callback_data=f"m:{v['id']}")])
+    kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
+    await m.answer(title, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# OBUNA TEKSHIRUVI
-@dp.callback_query(F.data == "check_sub")
-async def check_callback(call: CallbackQuery, bot: Bot):
-    if await check_sub_status(bot, call.from_user.id):
-        await call.answer("❌", show_alert=True)
-    else:
-        await call.message.delete()
-        await start_handler(call.message, bot)
-
-# LINK HANDLER (Yuklash)
+# LINK
 @dp.message(F.text.contains("http"))
-async def link_handler(message: Message, state: FSMContext, bot: Bot):
-    if await check_sub_status(bot, message.from_user.id):
-        await message.answer("❌ Sub!")
-        return
-    
-    lang = get_user_lang(message.from_user.id)
-    await state.update_data(url=message.text)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=TEXTS[lang]["video"], callback_data="d_vid"), 
-         InlineKeyboardButton(text=TEXTS[lang]["audio"], callback_data="d_aud")],
-        [InlineKeyboardButton(text="❌", callback_data="del_msg")]
-    ])
-    await message.reply(TEXTS[lang]["choose_format"], reply_markup=kb)
+async def link_h(m: Message, state: FSMContext, bot: Bot):
+    if await check_sub(bot, m.from_user.id): return await m.answer("❌ Sub!")
+    l = get_lang(m.from_user.id)
+    await state.update_data(url=m.text)
+    kb = [[InlineKeyboardButton(text=TEXTS[l]["video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["audio"], callback_data="aud")]]
+    await m.reply(TEXTS[l]["choose"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# MATN HANDLER (Musiqa qidirish)
+# SEARCH
 @dp.message(F.text)
-async def text_search_handler(message: Message, bot: Bot):
-    if message.text.startswith("/"): return # Buyruqlarni o'tkazib yuborish
-    if await check_sub_status(bot, message.from_user.id): return
+async def search_h(m: Message, bot: Bot):
+    if m.text.startswith("/"): return
+    if await check_sub(bot, m.from_user.id): return
+    l = get_lang(m.from_user.id)
+    msg = await m.answer(TEXTS[l]["search"])
+    res = await search_yt(m.text)
+    if not res: return await msg.edit_text(TEXTS[l]["not_found"])
+    kb = [[InlineKeyboardButton(text=f"🎵 {v['title'][:30]}", callback_data=f"m:{v['id']}")] for v in res]
+    kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
+    await msg.edit_text(f"👇 {m.text}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-    lang = get_user_lang(message.from_user.id)
-    msg = await message.answer(TEXTS[lang]["search"])
-    
-    results = await search_music_yt(message.text, limit=10)
-    
-    if not results:
-        await msg.edit_text(TEXTS[lang]["not_found"])
-        return
-
-    kb = []
-    for video in results:
-        t = video.get('title', 'Track')
-        vid = video.get('id')
-        kb.append([InlineKeyboardButton(text=f"🎵 {t[:35]}...", callback_data=f"music:{vid}")])
-    
-    kb.append([InlineKeyboardButton(text="❌", callback_data="del_msg")])
-    await msg.edit_text(TEXTS[lang]["results"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-# YUKLASH TUGMALARI (CALLBACK)
-@dp.callback_query(F.data.in_({"d_vid", "d_aud"}))
-async def download_call(call: CallbackQuery, state: FSMContext, bot: Bot):
-    await call.message.delete()
-    lang = get_user_lang(call.from_user.id)
-    data = await state.get_data()
-    url = data.get("url")
-    m_type = "video" if call.data == "d_vid" else "audio"
-    
-    msg = await call.message.answer(TEXTS[lang]["downloading"])
-    
-    fp, title = await download_media(url, call.from_user.id, type=m_type)
-    
-    if fp and os.path.exists(fp):
+# DOWNLOAD CALLBACKS
+@dp.callback_query(F.data.in_({"vid", "aud"}))
+async def dl_call(c: CallbackQuery, state: FSMContext):
+    await c.message.delete()
+    l = get_lang(c.from_user.id)
+    d = await state.get_data()
+    t = "video" if c.data == "vid" else "audio"
+    msg = await c.message.answer(TEXTS[l]["downloading"])
+    fp, ti = await dl_media(d.get("url"), c.from_user.id, t)
+    if fp:
         try:
-            await msg.edit_text(TEXTS[lang]["sending"])
+            await msg.edit_text(TEXTS[l]["sending"])
             f = FSInputFile(fp)
-            cap = f"{'🎬' if m_type=='video' else '🎵'} {title}\n🤖 @{(await bot.get_me()).username}"
-            
-            if m_type == "video": await call.message.answer_video(f, caption=cap)
-            else: await call.message.answer_audio(f, caption=cap)
+            cap = f"{ti}\n🤖 @{(await c.bot.get_me()).username}"
+            if t == "video": await c.message.answer_video(f, caption=cap)
+            else: await c.message.answer_audio(f, caption=cap)
             await msg.delete()
-        except: await msg.edit_text(TEXTS[lang]["error"])
-        finally: 
-            if os.path.exists(fp): os.remove(fp)
-    else: 
-        await msg.edit_text(f"{TEXTS[lang]['error']} (Cookies error or Link invalid)")
+        except: await msg.edit_text("Error")
+        finally: os.remove(fp)
+    else: await msg.edit_text(TEXTS[l]["not_found"])
     await state.clear()
 
-@dp.callback_query(F.data.startswith("music:"))
-async def music_dl_call(call: CallbackQuery, bot: Bot):
-    lang = get_user_lang(call.from_user.id)
-    vid_id = call.data.split(":")[1]
-    url = f"https://www.youtube.com/watch?v={vid_id}"
-    
-    # Eskisini o'chirmasdan turib, yangi xabar yozamiz
-    msg = await call.message.answer(TEXTS[lang]["downloading"])
-    
-    fp, title = await download_media(url, call.from_user.id, type="audio")
-    
-    if fp and os.path.exists(fp):
+@dp.callback_query(F.data.startswith("m:"))
+async def m_dl(c: CallbackQuery):
+    url = f"https://youtube.com/watch?v={c.data.split(':')[1]}"
+    await c.message.delete()
+    l = get_lang(c.from_user.id)
+    msg = await c.message.answer(TEXTS[l]["downloading"])
+    fp, ti = await dl_media(url, c.from_user.id, "audio")
+    if fp:
         try:
-            await msg.edit_text(TEXTS[lang]["sending"])
-            await call.message.answer_audio(FSInputFile(fp), caption=f"🎵 {title}\n🤖 @{(await bot.get_me()).username}")
+            await msg.edit_text(TEXTS[l]["sending"])
+            await c.message.answer_audio(FSInputFile(fp), caption=f"🎵 {ti}\n🤖 @{(await c.bot.get_me()).username}")
             await msg.delete()
-        except: await msg.edit_text(TEXTS[lang]["error"])
-        finally: 
-            if os.path.exists(fp): os.remove(fp)
-    else: 
-        await msg.edit_text(f"{TEXTS[lang]['error']} (Cookies required for YouTube)")
+        except: await msg.edit_text("Error")
+        finally: os.remove(fp)
+    else: await msg.edit_text("Error")
 
-@dp.callback_query(F.data == "del_msg")
-async def delete_msg(call: CallbackQuery):
-    await call.message.delete()
+@dp.callback_query(F.data == "del")
+async def del_m(c: CallbackQuery): await c.message.delete()
 
-# --- ADMIN PANEL (FAQAT BUYRUQ BILAN) ---
+# ADMIN (Kanal qo'shish)
 @dp.message(Command("admin"))
-async def admin_panel(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistika", callback_data="stat"), InlineKeyboardButton(text="📨 Reklama", callback_data="broadcast")],
-            [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch"), InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_ch")]
-        ])
-        await message.answer("👑 Admin Panel", reply_markup=kb)
+async def adm(m: Message):
+    if m.from_user.id == ADMIN_ID:
+        kb = [[InlineKeyboardButton(text="➕ Kanal", callback_data="add_ch"), InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_ch")]]
+        await m.answer("Admin:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# Admin panel funksiyalari oldingidek qoladi (joyni tejash uchun qaytarmadim, lekin ular ishlaydi)
-# (Bu yerga oldingi koddagi add_ch, del_ch, stat, broadcast funksiyalarini qo'shib qo'ying yoki shunday qoldiring)
-# ... ADMIN FUNKSIYALARINI DAVOMI SHU YERDA BO'LISHI KERAK ...
-# (Qisqartirilgan versiyada admin panelni to'liq yozmadim, lekin asosiy funksiyalar bor)
+@dp.callback_query(F.data == "add_ch")
+async def add_c(c: CallbackQuery, state: FSMContext):
+    await c.message.answer("Link (@kanal):"); await state.set_state(AdminState.add_ch_link)
+
+@dp.message(AdminState.add_ch_link)
+async def save_ch(m: Message, state: FSMContext, bot: Bot):
+    l = m.text; u = l.split("/")[-1]
+    if "t.me" not in l and not u.startswith("@"): u = "@"+u
+    try: c = await bot.get_chat(u); add_channel(l, str(c.id)); await m.answer("OK"); await state.clear()
+    except: await m.answer("Xato! Bot adminmi?")
+
+@dp.callback_query(F.data == "del_ch")
+async def del_c(c: CallbackQuery):
+    kb = [[InlineKeyboardButton(text=f"❌ {x[0]}", callback_data=f"rm:{x[1]}")] for x in get_channels()]
+    if kb: await c.message.answer("O'chirish:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    else: await c.answer("Bo'sh")
+
+@dp.callback_query(F.data.startswith("rm:"))
+async def rm_c(c: CallbackQuery): del_channel(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
 
 # SERVER
 async def health(r): return web.Response(text="OK")
