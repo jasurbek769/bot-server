@@ -24,56 +24,55 @@ DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
 # -----------------------------------------------------------
-# MATNLAR (SIZ TASHLAGAN ANIQ MATN)
+# MATNLAR (Siz yuborgan rasmdagi matnlar)
 # -----------------------------------------------------------
 TEXTS = {
     "uz": {
         "welcome": (
-            "<b>Assalomu alaykum. @MeningBotim ga Xush kelibsiz.</b>\n"
-            "Bot orqali quyidagilarni yuklab olishingiz mumkin:\n\n"
-            "• <b>Instagram</b> - post va IGTV + audio bilan;\n"
-            "• <b>TikTok</b> - suv belgisiz video + audio bilan;\n"
-            "• <b>YouTube</b> - videolar va shorts + audio bilan;\n"
-            "• <b>Snapchat</b> - suv belgisiz video + audio bilan;\n"
-            "• <b>Likee</b> - suv belgisiz video + audio bilan;\n"
-            "• <b>Pinterest</b> - suv belgisiz video va rasmlar + audio bilan;\n\n"
+            "🔥 <b>Assalomu alaykum. @MeningBotim ga Xush kelibsiz.</b>\n\n"
+            "Bot orqali quyidagilarni yuklab olishingiz mumkin:\n"
+            "• <b>Instagram</b> - post, stories, reels;\n"
+            "• <b>YouTube</b> - video, shorts, audio;\n"
+            "• <b>TikTok</b> - suv belgisiz video;\n"
+            "• <b>Facebook</b> - reels;\n"
+            "• <b>Pinterest</b> - rasm, video;\n"
+            "• <b>Snapchat</b> - rasm, video;\n"
+            "• <b>Likee</b> - rasm, video;\n"
+            "• <b>Threads</b> - rasm, video;\n\n"
             "<b>Shazam funksiya:</b>\n"
             "• Qo‘shiq nomi yoki ijrochi ismi\n"
             "• Qo‘shiq matni\n"
-            "• Ovozli xabar\n"
-            "• Video\n"
-            "• Audio\n"
-            "• Video xabar\n\n"
-            "🚀 <b>Yuklab olmoqchi bo'lgan videoga havolani yuboring!</b>"
+            "• Ovozli xabar\n\n"
+            "🚀 <b>Media yuklashni boshlash uchun uning havolasini yuboring!</b>"
         ),
         "search": "🔍 <b>Qidirilmoqda...</b>",
-        "not_found": "⚠️ <b>Afsuski musiqa topilmadi.</b>\nAniqroq yozib ko'ring.",
+        "not_found": "⚠️ <b>Afsuski musiqa topilmadi.</b>",
         "downloading": "⏳ <b>Yuklanmoqda...</b>",
         "sending": "📤 <b>Yuborilmoqda...</b>",
         "error": "❌ Xatolik yuz berdi.",
         "sub_check": "⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:",
         "btn_sub": "➕ A'zo bo'lish",
         "btn_verify": "✅ Tasdiqlash",
+        "btn_video": "🎬 Video",
+        "btn_audio": "🎵 Audio (MP3)",
         "choose": "Formatni tanlang:",
-        "video": "📹 Video",
-        "audio": "🎵 Audio (MP3)",
-        "top_title": "🔥 <b>TOP Chart (Trend):</b>",
-        "new_title": "🆕 <b>Yangi Xitlar:</b>",
+        "top_music": "🔥 <b>TOP 10 (Trend):</b>",
+        "new_music": "🆕 <b>Yangi Musiqalar:</b>",
         "lang_set": "✅ Til o'zgartirildi: O'zbekcha"
     },
     "ru": {
         "welcome": (
-            "<b>Приветствую! Добро пожаловать в @MeningBotim.</b>\n"
-            "Через бота можно скачать:\n\n"
-            "• <b>Instagram</b> - посты, IGTV + аудио;\n"
-            "• <b>TikTok</b> - видео без водяных знаков + аудио;\n"
-            "• <b>YouTube</b> - видео и шортс + аудио;\n"
-            "• <b>Pinterest, Likee, Snapchat</b> - контент без водяных знаков;\n\n"
+            "🔥 <b>Приветствую! Добро пожаловать в @MeningBotim.</b>\n\n"
+            "Через бота можно скачать:\n"
+            "• <b>Instagram</b> - посты, сторис, reels;\n"
+            "• <b>YouTube</b> - видео, шортс, аудио;\n"
+            "• <b>TikTok</b> - видео без водяных знаков;\n"
+            "• <b>Facebook, Pinterest, Likee</b> - контент;\n\n"
             "<b>Функция Shazam:</b>\n"
             "• Поиск по названию или исполнителю\n"
             "• Поиск по тексту песни\n"
             "• Голосовые сообщения\n\n"
-            "🚀 <b>Отправьте ссылку на видео для скачивания!</b>"
+            "🚀 <b>Отправьте ссылку для начала загрузки!</b>"
         ),
         "search": "🔍 <b>Поиск...</b>",
         "not_found": "⚠️ <b>Музыка не найдена.</b>",
@@ -83,17 +82,17 @@ TEXTS = {
         "sub_check": "⚠️ Подпишитесь на канал:",
         "btn_sub": "➕ Подписаться",
         "btn_verify": "✅ Проверить",
+        "btn_video": "🎬 Видео",
+        "btn_audio": "🎵 Аудио (MP3)",
         "choose": "Выберите формат:",
-        "video": "📹 Видео",
-        "audio": "🎵 Аудио (MP3)",
-        "top_title": "🔥 <b>ТОП Чарт (Тренд):</b>",
-        "new_title": "🆕 <b>Новинки:</b>",
+        "top_music": "🔥 <b>TOP 10 (Тренд):</b>",
+        "new_music": "🆕 <b>Новинки:</b>",
         "lang_set": "✅ Язык изменен: Русский"
     }
 }
 
 # -----------------------------------------------------------
-# BAZA
+# BAZA (LITE)
 # -----------------------------------------------------------
 def db_start():
     conn = sqlite3.connect("bot.db")
@@ -146,7 +145,7 @@ async def check_sub(bot, user_id):
         except: pass
     return not_sub
 
-# YUKLASH FUNKSIYASI (Cookies faylini tekshirib ishlatadi)
+# YUKLASH FUNKSIYASI (Cookies faylini o'zi qidiradi)
 async def dl_media(url, user_id, type="video"):
     ext = "mp4" if type == "video" else "mp3"
     fn = f"{DOWNLOAD_PATH}/{user_id}.{ext}"
@@ -190,9 +189,9 @@ async def start(m: Message, bot: Bot):
     
     await bot.set_my_commands([
         BotCommand(command="start", description="Restart"),
-        BotCommand(command="top", description="🔥 Top Music"),
-        BotCommand(command="new", description="🆕 New Music"),
-        BotCommand(command="lang", description="🌐 Language"),
+        BotCommand(command="top", description="🔥 Top"),
+        BotCommand(command="new", description="🆕 New"),
+        BotCommand(command="lang", description="🌐 Til"),
     ])
     await m.answer(TEXTS[l]["welcome"], disable_web_page_preview=True)
 
@@ -242,7 +241,7 @@ async def link_h(m: Message, state: FSMContext, bot: Bot):
     if await check_sub(bot, m.from_user.id): return await m.answer("❌ Sub!")
     l = get_lang(m.from_user.id)
     await state.update_data(url=m.text)
-    kb = [[InlineKeyboardButton(text=TEXTS[l]["video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["audio"], callback_data="aud")]]
+    kb = [[InlineKeyboardButton(text=TEXTS[l]["btn_video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["btn_audio"], callback_data="aud")]]
     await m.reply(TEXTS[l]["choose"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 # MUSIQA QIDIRISH
@@ -275,7 +274,7 @@ async def dl_call(c: CallbackQuery, state: FSMContext):
             if t == "video": await c.message.answer_video(f, caption=cap)
             else: await c.message.answer_audio(f, caption=cap)
             await msg.delete()
-        except: await msg.edit_text("Error")
+        except: await msg.edit_text(TEXTS[l]["error"])
         finally: os.remove(fp)
     else: await msg.edit_text(TEXTS[l]["not_found"])
     await state.clear()
@@ -292,14 +291,14 @@ async def m_dl(c: CallbackQuery):
             await msg.edit_text(TEXTS[l]["sending"])
             await c.message.answer_audio(FSInputFile(fp), caption=f"🎵 {ti}\n🤖 @{(await c.bot.get_me()).username}")
             await msg.delete()
-        except: await msg.edit_text("Error")
+        except: await msg.edit_text(TEXTS[l]["error"])
         finally: os.remove(fp)
-    else: await msg.edit_text("Error")
+    else: await msg.edit_text(TEXTS[l]["error"])
 
 @dp.callback_query(F.data == "del")
 async def del_m(c: CallbackQuery): await c.message.delete()
 
-# ADMIN (/admin)
+# ADMIN
 @dp.message(Command("admin"))
 async def adm(m: Message):
     if m.from_user.id == ADMIN_ID:
@@ -326,7 +325,7 @@ async def del_c(c: CallbackQuery):
 @dp.callback_query(F.data.startswith("rm:"))
 async def rm_c(c: CallbackQuery): del_channel(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
 
-# SERVER
+# SERVER (UptimeRobot uchun)
 async def health(r): return web.Response(text="OK")
 async def web_start():
     app = web.Application(); app.router.add_get('/', health)
