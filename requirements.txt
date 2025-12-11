@@ -1,3 +1,5 @@
 aiogram
-yt-dlp
 aiohttp
+gTTS
+deep-translator
+python-dotenv
