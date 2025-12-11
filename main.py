@@ -2,292 +2,253 @@ import asyncio
 import logging
 import sys
 import os
+import random
 import sqlite3
-import yt_dlp
-from ytmusicapi import YTMusic
-from aiogram import Bot, Dispatcher, F, html
+from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, BotCommand
+from aiogram.filters import CommandStart
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
+import aiohttp
+from dotenv import load_dotenv
+from gtts import gTTS
+from deep_translator import GoogleTranslator
 
-# --- SOZLAMALAR ---
-TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
-ADMIN_ID = 7950261926 
+# --- XAVFSIZLIK QISMI ---
+# 1. Kompyuterda ishlayotganda .env faylidan tokenni o'qiydi
+load_dotenv()
 
-# YouTube Music mijozi
-ytmusic = YTMusic()
+# 2. Tokenni o'zgaruvchidan olamiz (Kod ichida raqam yozilmaydi!)
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
+
+# Admin ID ni songa aylantiramiz (xatolik bo'lmasligi uchun)
+if ADMIN_ID:
+    ADMIN_ID = int(ADMIN_ID)
+else:
+    print("DIQQAT: ADMIN_ID topilmadi!")
 
 dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
-# --- MATNLAR ---
-TEXTS = {
-    "uz": {
-        "welcome": "🎧 <b>Assalomu alaykum!</b>\n\nMen <b>Musiqa va Video</b> yuklovchi botman.\n\n👇 <b>Qo'shiq nomini yozing yoki link yuboring:</b>",
-        "search": "🔍 <b>Qidirilmoqda...</b>",
-        "not_found": "⚠️ <b>Hech narsa topilmadi.</b>",
-        "downloading": "⏳ <b>Yuklanmoqda...</b>",
-        "sending": "📤 <b>Yuborilmoqda...</b>",
-        "error": "❌ Xatolik yuz berdi.",
-        "sub_check": "⚠️ Kanalga a'zo bo'ling:",
-        "btn_sub": "➕ A'zo bo'lish",
-        "btn_verify": "✅ Tasdiqlash",
-        "video": "🎬 Video",
-        "audio": "🎵 Audio (MP3)",
-        "choose": "Formatni tanlang:",
-    },
-    "ru": {
-        "welcome": "🎧 <b>Привет!</b>\n\nЯ бот для скачивания <b>Музыки и Видео</b>.\n\n👇 <b>Напишите название песни или отправьте ссылку:</b>",
-        "search": "🔍 <b>Поиск...</b>",
-        "not_found": "⚠️ <b>Ничего не найдено.</b>",
-        "downloading": "⏳ <b>Загрузка...</b>",
-        "sending": "📤 <b>Отправка...</b>",
-        "error": "❌ Ошибка.",
-        "sub_check": "⚠️ Подпишитесь на канал:",
-        "btn_sub": "➕ Подписаться",
-        "btn_verify": "✅ Проверить",
-        "video": "🎬 Видео",
-        "audio": "🎵 Аудио (MP3)",
-        "choose": "Выберите формат:",
-    }
-}
-
 # --- BAZA ---
 def db_start():
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, lang TEXT DEFAULT 'uz')")
+    cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
     cur.execute("CREATE TABLE IF NOT EXISTS channels (link TEXT, id TEXT)")
     conn.commit(); conn.close()
 
 def add_user(user_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users (user_id, lang) VALUES (?, 'uz')", (user_id,))
+    cur.execute("INSERT OR IGNORE INTO users VALUES (?)", (user_id,))
     conn.commit(); conn.close()
 
-def get_lang(user_id):
+def get_channels_db():
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT lang FROM users WHERE user_id=?", (user_id,))
-    r = cur.fetchone(); conn.close()
-    return r[0] if r else "uz"
+    cur.execute("SELECT * FROM channels"); return cur.fetchall()
 
-def set_lang(user_id, lang):
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("UPDATE users SET lang=? WHERE user_id=?", (lang, user_id))
-    conn.commit(); conn.close()
-
-# Kanal funksiyalari
-def get_channels():
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT * FROM channels"); r = cur.fetchall(); conn.close(); return r
-def add_channel(link, ch_id):
+def add_channel_db(link, ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("INSERT INTO channels VALUES (?, ?)", (link, ch_id)); conn.commit(); conn.close()
-def del_channel(ch_id):
+
+def del_channel_db(ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("DELETE FROM channels WHERE id=?", (ch_id,)); conn.commit(); conn.close()
+    cur.execute("DELETE FROM channels WHERE id = ?", (ch_id,)); conn.commit(); conn.close()
 
-# --- MANTIQ ---
-class AdminState(StatesGroup):
+def get_users_count():
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users"); return cur.fetchone()[0]
+
+def get_all_users():
+    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
+    cur.execute("SELECT user_id FROM users"); return [u[0] for u in cur.fetchall()]
+
+# --- STATES ---
+class ServiceState(StatesGroup):
+    image_prompt = State()
+    tts_text = State()
+    trans_text = State()
+    contact_admin = State()
     add_ch_link = State()
+    broadcast = State()
 
+# --- YORDAMCHI ---
 async def check_sub(bot, user_id):
     if user_id == ADMIN_ID: return []
-    ch = get_channels()
+    channels = get_channels_db()
     not_sub = []
-    for l, i in ch:
+    for link, ch_id in channels:
         try:
-            m = await bot.get_chat_member(i, user_id)
-            if m.status in ['left', 'kicked']: not_sub.append((l, i))
+            m = await bot.get_chat_member(ch_id, user_id)
+            if m.status in ['left', 'kicked']: not_sub.append((link, ch_id))
         except: pass
     return not_sub
 
-# --- QIDIRUV (YANGI: ytmusicapi) ---
-async def search_music_api(query):
+async def generate_image_api(prompt):
+    seed = random.randint(1, 10000)
+    safe_prompt = prompt.replace(" ", "%20")
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed={seed}&nologo=true"
     try:
-        # YouTube Music dan qidirish (Bu bloklanmaydi)
-        results = ytmusic.search(query, filter="songs", limit=10)
-        clean_results = []
-        for r in results:
-            if r.get('videoId'):
-                clean_results.append({
-                    'id': r['videoId'],
-                    'title': f"{r['title']} - {r['artists'][0]['name']}" if r.get('artists') else r['title']
-                })
-        return clean_results
-    except Exception as e:
-        print(f"Search Error: {e}")
-        return []
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200: return await resp.read()
+    except: return None
 
-# --- YUKLASH FUNKSIYASI ---
-async def dl_media(url, user_id, type="video"):
-    ext = "mp4" if type == "video" else "mp3"
-    fn = f"{DOWNLOAD_PATH}/{user_id}.{ext}"
-    
-    # Eng oddiy sozlamalar (Xatolikni kamaytirish uchun)
-    opts = {
-        'outtmpl': fn,
-        'noplaylist': True,
-        'quiet': True,
-        'format': 'bestaudio/best' if type == "audio" else 'best',
-        'http_headers': {'User-Agent': 'Mozilla/5.0'}
-    }
-    
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            return fn, info.get('title', 'Media')
-    except Exception as e: 
-        print(f"DL Error: {e}")
-        return None, None
-
-# -----------------------------------------------------------
-# HANDLERS
-# -----------------------------------------------------------
+# --- HANDLERS ---
 @dp.message(CommandStart())
-async def start(m: Message, bot: Bot):
-    add_user(m.from_user.id)
-    l = get_lang(m.from_user.id)
-    
-    ns = await check_sub(bot, m.from_user.id)
+async def start_handler(message: Message, bot: Bot):
+    add_user(message.from_user.id)
+    ns = await check_sub(bot, message.from_user.id)
     if ns:
-        kb = [[InlineKeyboardButton(text=TEXTS[l]["btn_sub"], url=x[0])] for x in ns]
-        kb.append([InlineKeyboardButton(text=TEXTS[l]["btn_verify"], callback_data="check")])
-        return await m.answer(TEXTS[l]["sub_check"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Restart"),
-        BotCommand(command="lang", description="Til / Language"),
+        kb = [[InlineKeyboardButton(text="➕ A'zo bo'lish", url=l)] for l, _ in ns]
+        kb.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_sub")])
+        await message.answer("⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        return
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 Rasm Yasash", callback_data="srv_img"), InlineKeyboardButton(text="🗣 Ovoz (TTS)", callback_data="srv_tts")],
+        [InlineKeyboardButton(text="🌍 Tarjimon", callback_data="srv_tr"), InlineKeyboardButton(text="📞 Admin", callback_data="contact")]
     ])
-    await m.answer(TEXTS[l]["welcome"])
-
-@dp.message(Command("lang"))
-async def lang_h(m: Message):
-    kb = [[InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="lang:uz"), InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru")]]
-    await m.answer("👇", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data.startswith("lang:"))
-async def set_l(c: CallbackQuery):
-    l = c.data.split(":")[1]
-    set_lang(c.from_user.id, l)
-    await c.message.delete()
-    await start(c.message, c.bot)
-
-@dp.callback_query(F.data == "check")
-async def check_c(c: CallbackQuery, bot: Bot):
-    if await check_sub(bot, c.from_user.id): await c.answer("❌", show_alert=True)
-    else: await c.message.delete(); await start(c.message, bot)
-
-# LINK (Video)
-@dp.message(F.text.contains("http"))
-async def link_h(m: Message, state: FSMContext, bot: Bot):
-    if await check_sub(bot, m.from_user.id): return await m.answer("❌ Sub!")
-    l = get_lang(m.from_user.id)
-    await state.update_data(url=m.text)
-    kb = [[InlineKeyboardButton(text=TEXTS[l]["video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["audio"], callback_data="aud")]]
-    await m.reply(TEXTS[l]["choose"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-# SEARCH (Qo'shiq qidirish)
-@dp.message(F.text)
-async def search_h(m: Message, bot: Bot):
-    if m.text.startswith("/"): return
-    if await check_sub(bot, m.from_user.id): return
-    l = get_lang(m.from_user.id)
-    msg = await m.answer(TEXTS[l]["search"])
+    if message.from_user.id == ADMIN_ID:
+        kb.inline_keyboard.append([InlineKeyboardButton(text="👑 Admin Panel", callback_data="admin_panel")])
     
-    # Yangi kutubxona orqali qidirish
-    res = await search_music_api(m.text)
-    
-    if not res: return await msg.edit_text(TEXTS[l]["not_found"])
-    
-    kb = []
-    for v in res:
-        # ID ni qisqa qilib tugmaga joylaymiz
-        kb.append([InlineKeyboardButton(text=f"🎵 {v['title'][:40]}", callback_data=f"m:{v['id']}")])
-    
-    kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
-    await msg.edit_text(f"👇 <b>{m.text}</b>:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await message.answer(f"👋 <b>Salom {message.from_user.full_name}!</b>\nXizmatni tanlang:", reply_markup=kb)
 
-# CALLBACKLAR
-@dp.callback_query(F.data.in_({"vid", "aud"}))
-async def dl_call(c: CallbackQuery, state: FSMContext):
-    await c.message.delete()
-    l = get_lang(c.from_user.id)
-    d = await state.get_data()
-    t = "video" if c.data == "vid" else "audio"
-    msg = await c.message.answer(TEXTS[l]["downloading"])
-    fp, ti = await dl_media(d.get("url"), c.from_user.id, t)
-    if fp and os.path.exists(fp):
-        try:
-            await msg.edit_text(TEXTS[l]["sending"])
-            f = FSInputFile(fp)
-            cap = f"{ti}\n🤖 @{(await c.bot.get_me()).username}"
-            if t == "video": await c.message.answer_video(f, caption=cap)
-            else: await c.message.answer_audio(f, caption=cap)
-            await msg.delete()
-        except: await msg.edit_text("Error sending")
-        finally: 
-            if os.path.exists(fp): os.remove(fp)
-    else: await msg.edit_text(TEXTS[l]["error"])
+@dp.callback_query(F.data == "check_sub")
+async def check_cb(c: CallbackQuery, bot: Bot):
+    if await check_sub(bot, c.from_user.id): await c.answer("❌ A'zo bo'lmadingiz!", show_alert=True)
+    else: await c.message.delete(); await start_handler(c.message, bot)
+
+@dp.callback_query(F.data == "back")
+async def back_home(c: CallbackQuery, state: FSMContext):
+    await state.clear(); await c.message.delete(); await start_handler(c.message, c.bot)
+
+# --- 1. RASM ---
+@dp.callback_query(F.data == "srv_img")
+async def ask_img(c: CallbackQuery, state: FSMContext):
+    await c.message.edit_text("🎨 <b>Nima chizib beray?</b> (Inglizcha yozing):", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+    await state.set_state(ServiceState.image_prompt)
+
+@dp.message(ServiceState.image_prompt)
+async def gen_img(m: Message, state: FSMContext):
+    msg = await m.reply("🎨 Chizilmoqda...")
+    img = await generate_image_api(m.text)
+    if img:
+        await msg.delete()
+        await m.answer_photo(BufferedInputFile(img, "img.jpg"), caption=f"🖼 {m.text}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bosh menyu", callback_data="back")]]))
+    else: await msg.edit_text("Xatolik.")
     await state.clear()
 
-@dp.callback_query(F.data.startswith("m:"))
-async def m_dl(c: CallbackQuery):
-    vid_id = c.data.split(":")[1]
-    url = f"https://music.youtube.com/watch?v={vid_id}" # Music link
-    
-    await c.message.delete()
-    l = get_lang(c.from_user.id)
-    msg = await c.message.answer(TEXTS[l]["downloading"])
-    
-    fp, ti = await dl_media(url, c.from_user.id, "audio")
-    
-    if fp and os.path.exists(fp):
-        try:
-            await msg.edit_text(TEXTS[l]["sending"])
-            await c.message.answer_audio(FSInputFile(fp), caption=f"🎵 {ti}\n🤖 @{(await c.bot.get_me()).username}")
-            await msg.delete()
-        except: await msg.edit_text("Error sending")
-        finally: 
-            if os.path.exists(fp): os.remove(fp)
-    else: await msg.edit_text(TEXTS[l]["error"])
+# --- 2. OVOZ (TTS) ---
+@dp.callback_query(F.data == "srv_tts")
+async def ask_tts(c: CallbackQuery, state: FSMContext):
+    await c.message.edit_text("🗣 <b>Matnni yozing (O'zbek, Rus yoki Ingliz):</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+    await state.set_state(ServiceState.tts_text)
 
-@dp.callback_query(F.data == "del")
-async def del_m(c: CallbackQuery): await c.message.delete()
+@dp.message(ServiceState.tts_text)
+async def gen_tts(m: Message, state: FSMContext):
+    msg = await m.reply("🗣 Ovoz yozilmoqda...")
+    try:
+        tts = gTTS(text=m.text, lang='en', slow=False) # Universal bo'lishi uchun EN, yoki avto aniqlash qo'shish mumkin
+        path = f"{DOWNLOAD_PATH}/{m.from_user.id}.mp3"
+        tts.save(path)
+        await msg.delete()
+        await m.answer_audio(FSInputFile(path), caption="🔊 Tayyor", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+        os.remove(path)
+    except: await msg.edit_text("Xatolik.")
+    await state.clear()
 
-# ADMIN
-@dp.message(Command("admin"))
-async def adm(m: Message):
+# --- 3. TARJIMON ---
+@dp.callback_query(F.data == "srv_tr")
+async def ask_tr(c: CallbackQuery, state: FSMContext):
+    await c.message.edit_text("🌍 <b>Tarjima uchun matn yozing:</b>\n(Avtomatik aniqlab O'zbekchaga o'giradi)", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+    await state.set_state(ServiceState.trans_text)
+
+@dp.message(ServiceState.trans_text)
+async def gen_tr(m: Message, state: FSMContext):
+    try:
+        res = GoogleTranslator(source='auto', target='uz').translate(m.text)
+        await m.reply(f"🌍 <b>Tarjima:</b>\n\n{res}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+    except: await m.reply("Xatolik.")
+    await state.clear()
+
+# --- ALOQA VA ADMIN ---
+@dp.callback_query(F.data == "contact")
+async def contact(c: CallbackQuery, state: FSMContext):
+    await c.message.edit_text("✍️ Xabar yozing:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+    await state.set_state(ServiceState.contact_admin)
+
+@dp.message(ServiceState.contact_admin)
+async def send_admin(m: Message, state: FSMContext, bot: Bot):
+    if ADMIN_ID:
+        await bot.send_message(ADMIN_ID, f"📨 <b>Xabar:</b>\n{m.from_user.full_name} (ID: <code>{m.from_user.id}</code>):\n{m.text}")
+        await m.reply("✅ Yuborildi.")
+    await state.clear()
+
+@dp.message(F.reply_to_message)
+async def reply_user(m: Message, bot: Bot):
     if m.from_user.id == ADMIN_ID:
-        kb = [[InlineKeyboardButton(text="➕ Kanal", callback_data="add_ch"), InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_ch")]]
-        await m.answer("Admin:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        try:
+            uid = int(m.reply_to_message.text.split("ID:")[1].split(")")[0].replace("<code>", "").replace("</code>", "").strip())
+            await bot.send_message(uid, f"☎️ <b>Admin javobi:</b>\n{m.text}")
+            await m.reply("Ketdi.")
+        except: pass
+
+# --- ADMIN PANEL ---
+@dp.callback_query(F.data == "admin_panel")
+async def adm_p(c: CallbackQuery):
+    if c.from_user.id != ADMIN_ID: return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Stat", callback_data="stat"), InlineKeyboardButton(text="📨 Reklama", callback_data="broad")],
+        [InlineKeyboardButton(text="➕ Kanal", callback_data="add_ch"), InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_ch")],
+        [InlineKeyboardButton(text="🔙 Chiqish", callback_data="back")]
+    ])
+    await c.message.edit_text("Admin Panel:", reply_markup=kb)
+
+@dp.callback_query(F.data == "stat")
+async def stat(c: CallbackQuery): await c.answer(f"Odamlar: {get_users_count()}", show_alert=True)
+
+@dp.callback_query(F.data == "broad")
+async def broad(c: CallbackQuery, state: FSMContext):
+    await c.message.answer("Reklama yuboring:"); await state.set_state(AdminState.broadcast)
+
+@dp.message(AdminState.broadcast)
+async def send_broad(m: Message, state: FSMContext):
+    u = get_all_users(); await m.answer("Ketdi..."); 
+    for i in u:
+        try: await m.copy_to(i); await asyncio.sleep(0.05)
+        except: pass
+    await m.answer("Tugadi."); await state.clear()
 
 @dp.callback_query(F.data == "add_ch")
 async def add_c(c: CallbackQuery, state: FSMContext):
-    await c.message.answer("Link (@kanal):"); await state.set_state(AdminState.add_ch_link)
+    await c.message.answer("Kanal linki:"); await state.set_state(AdminState.add_ch_link)
 
 @dp.message(AdminState.add_ch_link)
 async def save_ch(m: Message, state: FSMContext, bot: Bot):
-    l = m.text; u = l.split("/")[-1]
-    if "t.me" not in l and not u.startswith("@"): u = "@"+u
-    try: c = await bot.get_chat(u); add_channel(l, str(c.id)); await m.answer("OK"); await state.clear()
+    try: 
+        link = m.text
+        if "t.me" in link and not "@" in link: username = "@" + link.split("/")[-1]
+        else: username = link
+        c = await bot.get_chat(username); add_channel_db(link, str(c.id)); await m.answer("Qo'shildi!")
     except: await m.answer("Xato! Bot adminmi?")
+    await state.clear()
 
 @dp.callback_query(F.data == "del_ch")
 async def del_c(c: CallbackQuery):
-    kb = [[InlineKeyboardButton(text=f"❌ {x[0]}", callback_data=f"rm:{x[1]}")] for x in get_channels()]
-    if kb: await c.message.answer("O'chirish:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    kb = [[InlineKeyboardButton(text=f"❌ {x[0]}", callback_data=f"rm:{x[1]}")] for x in get_channels_db()]
+    if kb: await c.message.edit_text("Tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     else: await c.answer("Bo'sh")
 
 @dp.callback_query(F.data.startswith("rm:"))
-async def rm_c(c: CallbackQuery): del_channel(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
+async def rm_c(c: CallbackQuery): del_channel_db(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
 
-# SERVER
+# --- SERVER ---
 async def health(r): return web.Response(text="OK")
 async def web_start():
     app = web.Application(); app.router.add_get('/', health)
@@ -296,6 +257,7 @@ async def web_start():
 
 async def main():
     db_start()
+    if not TOKEN: return
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     await asyncio.gather(dp.start_polling(bot), web_start())
 
