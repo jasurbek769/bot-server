@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, F, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
@@ -17,14 +17,14 @@ from aiohttp import web
 # 1. SOZLAMALAR
 # -----------------------------------------------------------
 TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
-ADMIN_ID = 7950261926  # <-- O'Z ID RAQAMINGIZNI YOZING!
+ADMIN_ID = 7950261926  # <-- O'Z ID RAQAMINGIZ!
 
 dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
 # -----------------------------------------------------------
-# 2. BAZA (Foydalanuvchi va Kanallar)
+# 2. BAZA
 # -----------------------------------------------------------
 def db_start():
     conn = sqlite3.connect("bot.db")
@@ -74,12 +74,16 @@ def get_channels_db():
     return cur.fetchall()
 
 # -----------------------------------------------------------
-# 3. STATES & LOGIKA
+# 3. STATES & MANTIQ
 # -----------------------------------------------------------
 class AdminState(StatesGroup):
     broadcast = State()
     add_ch_link = State()
     add_ch_id = State()
+    reply_msg = State() # Javob yozish uchun
+
+class UserState(StatesGroup):
+    waiting_for_question = State() # Admin ga savol yozish holati
 
 async def check_sub_status(bot: Bot, user_id: int):
     if user_id == ADMIN_ID: return []
@@ -93,36 +97,55 @@ async def check_sub_status(bot: Bot, user_id: int):
         except: continue
     return not_subbed
 
-async def download_video(url, user_id):
-    file_name = f"{DOWNLOAD_PATH}/{user_id}_video.mp4"
+async def download_media(url, user_id, type="video"):
+    ext = "mp4" if type == "video" else "mp3"
+    file_name = f"{DOWNLOAD_PATH}/{user_id}_media.{ext}"
     cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
+    
+    format_spec = 'best' if type == "video" else 'bestaudio/best'
     ydl_opts = {
-        'format': 'best',
+        'format': format_spec,
         'outtmpl': file_name,
         'noplaylist': True,
         'quiet': True,
         'cookiefile': cookie_file,
-        'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        'http_headers': {'User-Agent': 'Mozilla/5.0'}
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            return file_name, info.get('title', 'Video')
+            return file_name, info.get('title', 'Media')
     except Exception as e: return None, None
 
 # -----------------------------------------------------------
 # 4. BOT HANDLERS
 # -----------------------------------------------------------
+
+# ASOSIY MENYU TUGMALARI
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📥 Video/Audio Yuklash"), KeyboardButton(text="📞 Admin bilan aloqa")],
+        [KeyboardButton(text="📊 Statistika")]
+    ],
+    resize_keyboard=True
+)
+
 @dp.message(CommandStart())
 async def start_handler(message: Message, bot: Bot):
     add_user(message.from_user.id)
     not_subbed = await check_sub_status(bot, message.from_user.id)
+    
     if not_subbed:
         kb = [[InlineKeyboardButton(text="➕ A'zo bo'lish", url=l)] for l, _ in not_subbed]
         kb.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_sub")])
-        await message.answer("Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        await message.answer("⚠️ <b>Botdan to'liq foydalanish uchun kanallarga a'zo bo'ling:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     else:
-        await message.answer("✅ Botga xush kelibsiz! Menga link yuboring.")
+        await message.answer(
+            f"👋 Assalomu alaykum, {message.from_user.full_name}!\n\n"
+            "🤖 <b>Men Professional Yuklovchi va Yordamchi botman.</b>\n"
+            "Quyidagi menudan kerakli bo'limni tanlang 👇", 
+            reply_markup=main_menu
+        )
 
 @dp.callback_query(F.data == "check_sub")
 async def check_callback(call: CallbackQuery, bot: Bot):
@@ -130,46 +153,102 @@ async def check_callback(call: CallbackQuery, bot: Bot):
         await call.answer("❌ Hali a'zo bo'lmadingiz!", show_alert=True)
     else:
         await call.message.delete()
-        await call.message.answer("🎉 Rahmat! Link yuborishingiz mumkin.")
+        await call.message.answer("🎉 Rahmat! Endi bemalol foydalaning.", reply_markup=main_menu)
 
-# --- YANGI FUNKSIYA: ID ANIQLOVCHI (FAQAT ADMIN UCHUN) ---
-@dp.message(F.forward_from_chat)
-async def get_channel_id_handler(message: Message):
-    # Faqat admin uchun ishlaydi
-    if message.from_user.id == ADMIN_ID:
-        chat_id = message.forward_from_chat.id
-        title = message.forward_from_chat.title
-        await message.reply(
-            f"📢 <b>Kanal nomi:</b> {title}\n"
-            f"🆔 <b>ID:</b> <code>{chat_id}</code>\n\n"
-            "👆 ID ustiga bossangiz nusxalanadi."
+# --- MENYU BUYRUQLARI ---
+@dp.message(F.text == "📥 Video/Audio Yuklash")
+async def menu_download(message: Message):
+    await message.answer("🔗 <b>TikTok, Instagram yoki YouTube linkini yuboring:</b>")
+
+@dp.message(F.text == "📊 Statistika")
+async def menu_stat(message: Message):
+    count = get_users_count()
+    await message.answer(f"👥 Bot foydalanuvchilari: <b>{count} ta</b>")
+
+# --- ALOQA TIZIMI (FOYDALANUVCHI TOMONI) ---
+@dp.message(F.text == "📞 Admin bilan aloqa")
+async def contact_admin(message: Message, state: FSMContext):
+    await message.answer("✍️ <b>Xabaringizni yozib qoldiring:</b>\n(Savol, taklif yoki shikoyat)")
+    await state.set_state(UserState.waiting_for_question)
+
+@dp.message(UserState.waiting_for_question)
+async def receive_question(message: Message, state: FSMContext, bot: Bot):
+    # Xabarni Adminga yuborish
+    try:
+        # Biz xabarni adminga forward qilamiz va tagiga ID sini yozamiz
+        # Shunda admin Reply qilganda bot kimga javob qaytarishni biladi
+        await bot.send_message(
+            chat_id=ADMIN_ID, 
+            text=f"📨 <b>YANGI MUROJAAT!</b>\n\n👤 <b>Kimdan:</b> {message.from_user.full_name}\n🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n📄 <b>Xabar:</b>\n{message.text}\n\n<i>Javob berish uchun shu xabarga Reply (Javob) qiling.</i>"
         )
+        await message.answer("✅ <b>Xabaringiz Adminga yuborildi!</b>\nTez orada javob olasiz.")
+    except Exception as e:
+        await message.answer("❌ Xatolik yuz berdi.")
+    
+    await state.clear()
 
-# --- ADMIN PANEL ---
+# --- ALOQA TIZIMI (ADMIN TOMONI - REPLY) ---
+@dp.message(F.reply_to_message)
+async def admin_reply_handler(message: Message, bot: Bot):
+    # Faqat admin javob yozsa ishlaydi
+    if message.from_user.id == ADMIN_ID:
+        try:
+            # Reply qilingan xabarning ichidan foydalanuvchi ID sini topishga harakat qilamiz
+            original_text = message.reply_to_message.text
+            
+            # ID ni qidiramiz (Biz yuborgan format bo'yicha "ID: 12345" qatorini topish)
+            user_id = None
+            for line in original_text.split("\n"):
+                if "ID:" in line:
+                    user_id = int(line.split("ID:")[1].replace("<code>", "").replace("</code>", "").strip())
+                    break
+            
+            if user_id:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"☎️ <b>ADMINDAN JAVOB:</b>\n\n{message.text}"
+                )
+                await message.answer("✅ Javob yuborildi!")
+            else:
+                await message.answer("❌ Foydalanuvchi ID sini topa olmadim. Murojaat formati buzilgan bo'lishi mumkin.")
+                
+        except Exception as e:
+            await message.answer(f"❌ Xatolik: {e}")
+
+# --- ADMIN PANEL (COMMAND) ---
 @dp.message(Command("admin"))
 async def admin_panel(message: Message):
     if message.from_user.id == ADMIN_ID:
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistika", callback_data="stat")],
+            [InlineKeyboardButton(text="📊 Statistika", callback_data="stat"),
+             InlineKeyboardButton(text="💾 Bazani yuklash", callback_data="backup")],
             [InlineKeyboardButton(text="📨 Reklama yuborish", callback_data="broadcast")],
             [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch"), 
              InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="del_ch")]
         ])
-        await message.answer(f"👑 <b>Admin Panel</b>\n👥 Obunachilar: {get_users_count()} ta", reply_markup=kb)
+        await message.answer(f"👑 <b>Admin Panel</b>", reply_markup=kb)
 
+# ... (ADMIN PANEL CALLBACKLARI - OLDINGI KOD BILAN BIR XIL) ...
 @dp.callback_query(F.data == "stat")
 async def show_stat(call: CallbackQuery):
-    await call.answer(f"Jami foydalanuvchilar: {get_users_count()}", show_alert=True)
+    await call.answer(f"Jami: {get_users_count()}", show_alert=True)
+
+@dp.callback_query(F.data == "backup")
+async def backup_db(call: CallbackQuery):
+    try:
+        file = FSInputFile("bot.db")
+        await call.message.answer_document(file, caption="📂 Baza.")
+    except: await call.answer("Topilmadi", show_alert=True)
 
 @dp.callback_query(F.data == "broadcast")
 async def ask_broadcast(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Reklama xabarini yuboring:")
+    await call.message.answer("Reklamani yuboring:")
     await state.set_state(AdminState.broadcast)
 
 @dp.message(AdminState.broadcast)
 async def send_broadcast(message: Message, state: FSMContext):
     users = get_all_users()
-    await message.answer(f"🚀 Xabar {len(users)} kishiga yuborilmoqda...")
+    await message.answer(f"🚀 Ketdi... ({len(users)} ta)")
     c = 0
     for u in users:
         try:
@@ -177,38 +256,33 @@ async def send_broadcast(message: Message, state: FSMContext):
             c += 1
             await asyncio.sleep(0.05)
         except: pass
-    await message.answer(f"✅ Yuborildi: {c} ta")
+    await message.answer(f"✅ Yetib bordi: {c}")
     await state.clear()
 
 @dp.callback_query(F.data == "add_ch")
 async def ask_ch(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Kanal LINKINI yuboring (masalan: https://t.me/kanalim):")
+    await call.message.answer("Kanal LINKI:")
     await state.set_state(AdminState.add_ch_link)
 
 @dp.message(AdminState.add_ch_link)
 async def get_ch_l(message: Message, state: FSMContext):
     await state.update_data(link=message.text)
-    await message.answer("Endi o'sha kanaldan menga bitta xabar <b>FORWARD</b> qiling (yoki IDni qo'lda yozing):")
+    await message.answer("Kanal IDsi (yoki Forward qiling):")
     await state.set_state(AdminState.add_ch_id)
 
 @dp.message(AdminState.add_ch_id)
 async def get_ch_i(message: Message, state: FSMContext):
-    # Agar forward qilsa, IDni o'zi oladi
-    if message.forward_from_chat:
-        ch_id = str(message.forward_from_chat.id)
-    else:
-        ch_id = message.text
-
+    ch_id = str(message.forward_from_chat.id) if message.forward_from_chat else message.text
     d = await state.get_data()
     add_channel_db(d.get("link"), ch_id)
-    await message.answer(f"✅ Kanal qo'shildi!\nID: {ch_id}\nLink: {d.get('link')}")
+    await message.answer(f"✅ Qo'shildi: {ch_id}")
     await state.clear()
 
 @dp.callback_query(F.data == "del_ch")
 async def del_ch_show(call: CallbackQuery):
     kb = [[InlineKeyboardButton(text=f"❌ {l}", callback_data=f"del:{i}")] for l, i in get_channels_db()]
-    if not kb: await call.answer("Kanallar ro'yxati bo'sh", show_alert=True)
-    else: await call.message.answer("Qaysi kanalni o'chiramiz?", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    if not kb: await call.answer("Bo'sh", show_alert=True)
+    else: await call.message.answer("O'chirish:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data.startswith("del:"))
 async def del_ch_do(call: CallbackQuery):
@@ -216,29 +290,53 @@ async def del_ch_do(call: CallbackQuery):
     await call.answer("O'chirildi")
     await call.message.delete()
 
-# LINKNI USHLASH
+# --- LINK HANDLER ---
 @dp.message(F.text.contains("http"))
-async def vid_handler(message: Message, bot: Bot):
+async def link_handler(message: Message, state: FSMContext, bot: Bot):
     if await check_sub_status(bot, message.from_user.id):
-        await message.answer("❌ Botdan foydalanish uchun kanallarga a'zo bo'ling! /start ni bosing.")
+        await message.answer("❌ Kanallarga a'zo bo'ling!")
         return
-    msg = await message.reply("⏳ <b>Video yuklanmoqda...</b>")
-    file_path, title = await download_video(message.text, message.from_user.id)
+    
+    await state.update_data(url=message.text)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎬 Video", callback_data="get_video"),
+         InlineKeyboardButton(text="🎵 Audio (MP3)", callback_data="get_audio")],
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel")]
+    ])
+    await message.reply("Formatni tanlang:", reply_markup=kb)
+
+@dp.callback_query(F.data.in_({"get_video", "get_audio"}))
+async def process_media(call: CallbackQuery, state: FSMContext, bot: Bot):
+    await call.message.delete()
+    data = await state.get_data()
+    url = data.get("url")
+    m_type = "video" if call.data == "get_video" else "audio"
+    
+    msg = await call.message.answer("⏳ Yuklanmoqda...")
+    file_path, title = await download_media(url, call.from_user.id, type=m_type)
+    
     if file_path and os.path.exists(file_path):
         try:
             await msg.edit_text("📤 Yuborilmoqda...")
-            await message.reply_video(FSInputFile(file_path), caption=f"🎬 {title}\n🤖 Bot: @{(await bot.get_me()).username}")
+            media = FSInputFile(file_path)
+            caption = f"{'🎬' if m_type=='video' else '🎵'} {title}\n🤖 @{(await bot.get_me()).username}"
+            
+            if m_type == "video": await call.message.answer_video(media, caption=caption)
+            else: await call.message.answer_audio(media, caption=caption)
             await msg.delete()
-        except Exception as e: await msg.edit_text(f"Xatolik: {e}")
-        finally:
+        except: await msg.edit_text("❌ Xato.")
+        finally: 
             if os.path.exists(file_path): os.remove(file_path)
-    else: await msg.edit_text("❌ Yuklay olmadim. Linkni tekshiring.")
+    else: await msg.edit_text("❌ Yuklab bo'lmadi.")
+    await state.clear()
 
-# -----------------------------------------------------------
-# 5. RENDER UCHUN WEB-SERVER
-# -----------------------------------------------------------
-async def health_check(request): return web.Response(text="Bot is running!")
+@dp.callback_query(F.data == "cancel")
+async def cancel_action(call: CallbackQuery, state: FSMContext):
+    await call.message.delete()
+    await state.clear()
 
+# --- SERVER ---
+async def health_check(request): return web.Response(text="Running")
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', health_check)
