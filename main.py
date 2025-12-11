@@ -13,7 +13,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
-# --- SOZLAMALAR ---
+# -----------------------------------------------------------
+# SOZLAMALAR
+# -----------------------------------------------------------
 TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
 ADMIN_ID = 7950261926 
 
@@ -21,7 +23,9 @@ dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
-# --- MATNLAR (SKRINSHOTDAGI AYNAN O'SHA MATNLAR) ---
+# -----------------------------------------------------------
+# MATNLAR (SIZ TASHLAGAN ANIQ MATN)
+# -----------------------------------------------------------
 TEXTS = {
     "uz": {
         "welcome": (
@@ -40,13 +44,13 @@ TEXTS = {
             "• Video\n"
             "• Audio\n"
             "• Video xabar\n\n"
-            "🚀 <b>Yuklab olmoqchi bo'lgan videoga havolani yuboring!</b>\n"
-            "<i>(Yoki shunchaki qo'shiq nomini yozing)</i>"
+            "🚀 <b>Yuklab olmoqchi bo'lgan videoga havolani yuboring!</b>"
         ),
         "search": "🔍 <b>Qidirilmoqda...</b>",
         "not_found": "⚠️ <b>Afsuski musiqa topilmadi.</b>\nAniqroq yozib ko'ring.",
         "downloading": "⏳ <b>Yuklanmoqda...</b>",
         "sending": "📤 <b>Yuborilmoqda...</b>",
+        "error": "❌ Xatolik yuz berdi.",
         "sub_check": "⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:",
         "btn_sub": "➕ A'zo bo'lish",
         "btn_verify": "✅ Tasdiqlash",
@@ -69,13 +73,13 @@ TEXTS = {
             "• Поиск по названию или исполнителю\n"
             "• Поиск по тексту песни\n"
             "• Голосовые сообщения\n\n"
-            "🚀 <b>Отправьте ссылку на видео для скачивания!</b>\n"
-            "<i>(Или просто напишите название песни)</i>"
+            "🚀 <b>Отправьте ссылку на видео для скачивания!</b>"
         ),
         "search": "🔍 <b>Поиск...</b>",
         "not_found": "⚠️ <b>Музыка не найдена.</b>",
         "downloading": "⏳ <b>Загрузка...</b>",
         "sending": "📤 <b>Отправка...</b>",
+        "error": "❌ Ошибка.",
         "sub_check": "⚠️ Подпишитесь на канал:",
         "btn_sub": "➕ Подписаться",
         "btn_verify": "✅ Проверить",
@@ -88,7 +92,9 @@ TEXTS = {
     }
 }
 
-# --- BAZA ---
+# -----------------------------------------------------------
+# BAZA
+# -----------------------------------------------------------
 def db_start():
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
@@ -123,7 +129,9 @@ def del_channel(ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("DELETE FROM channels WHERE id=?", (ch_id,)); conn.commit(); conn.close()
 
-# --- MANTIQ ---
+# -----------------------------------------------------------
+# MANTIQ
+# -----------------------------------------------------------
 class AdminState(StatesGroup):
     add_ch_link = State()
 
@@ -138,7 +146,7 @@ async def check_sub(bot, user_id):
         except: pass
     return not_sub
 
-# SUPER DOWNLOADER
+# YUKLASH FUNKSIYASI (Cookies faylini tekshirib ishlatadi)
 async def dl_media(url, user_id, type="video"):
     ext = "mp4" if type == "video" else "mp3"
     fn = f"{DOWNLOAD_PATH}/{user_id}.{ext}"
@@ -166,7 +174,9 @@ async def search_yt(q, limit=10):
             return res.get('entries', [])
     except: return []
 
-# --- HANDLERS ---
+# -----------------------------------------------------------
+# HANDLERS
+# -----------------------------------------------------------
 @dp.message(CommandStart())
 async def start(m: Message, bot: Bot):
     add_user(m.from_user.id)
@@ -180,9 +190,9 @@ async def start(m: Message, bot: Bot):
     
     await bot.set_my_commands([
         BotCommand(command="start", description="Restart"),
-        BotCommand(command="top", description="Top Music"),
-        BotCommand(command="new", description="New Music"),
-        BotCommand(command="lang", description="Language/Til"),
+        BotCommand(command="top", description="🔥 Top Music"),
+        BotCommand(command="new", description="🆕 New Music"),
+        BotCommand(command="lang", description="🌐 Language"),
     ])
     await m.answer(TEXTS[l]["welcome"], disable_web_page_preview=True)
 
@@ -226,7 +236,7 @@ async def show_res(m, res, title):
     kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
     await m.answer(title, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# LINK
+# LINK ORQALI YUKLASH
 @dp.message(F.text.contains("http"))
 async def link_h(m: Message, state: FSMContext, bot: Bot):
     if await check_sub(bot, m.from_user.id): return await m.answer("❌ Sub!")
@@ -235,7 +245,7 @@ async def link_h(m: Message, state: FSMContext, bot: Bot):
     kb = [[InlineKeyboardButton(text=TEXTS[l]["video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["audio"], callback_data="aud")]]
     await m.reply(TEXTS[l]["choose"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# SEARCH
+# MUSIQA QIDIRISH
 @dp.message(F.text)
 async def search_h(m: Message, bot: Bot):
     if m.text.startswith("/"): return
@@ -248,7 +258,7 @@ async def search_h(m: Message, bot: Bot):
     kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
     await msg.edit_text(f"👇 {m.text}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# DOWNLOAD CALLBACKS
+# CALLBACKLAR
 @dp.callback_query(F.data.in_({"vid", "aud"}))
 async def dl_call(c: CallbackQuery, state: FSMContext):
     await c.message.delete()
@@ -289,7 +299,7 @@ async def m_dl(c: CallbackQuery):
 @dp.callback_query(F.data == "del")
 async def del_m(c: CallbackQuery): await c.message.delete()
 
-# ADMIN (Kanal qo'shish)
+# ADMIN (/admin)
 @dp.message(Command("admin"))
 async def adm(m: Message):
     if m.from_user.id == ADMIN_ID:
