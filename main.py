@@ -13,9 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
 
-# -----------------------------------------------------------
-# SOZLAMALAR
-# -----------------------------------------------------------
+# --- SOZLAMALAR ---
 TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
 ADMIN_ID = 7950261926 
 
@@ -23,27 +21,16 @@ dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
-# -----------------------------------------------------------
-# MATNLAR (Siz yuborgan rasmdagi matnlar)
-# -----------------------------------------------------------
+# --- MATNLAR ---
 TEXTS = {
     "uz": {
         "welcome": (
-            "🔥 <b>Assalomu alaykum. @MeningBotim ga Xush kelibsiz.</b>\n\n"
-            "Bot orqali quyidagilarni yuklab olishingiz mumkin:\n"
-            "• <b>Instagram</b> - post, stories, reels;\n"
-            "• <b>YouTube</b> - video, shorts, audio;\n"
-            "• <b>TikTok</b> - suv belgisiz video;\n"
-            "• <b>Facebook</b> - reels;\n"
-            "• <b>Pinterest</b> - rasm, video;\n"
-            "• <b>Snapchat</b> - rasm, video;\n"
-            "• <b>Likee</b> - rasm, video;\n"
-            "• <b>Threads</b> - rasm, video;\n\n"
-            "<b>Shazam funksiya:</b>\n"
-            "• Qo‘shiq nomi yoki ijrochi ismi\n"
-            "• Qo‘shiq matni\n"
-            "• Ovozli xabar\n\n"
-            "🚀 <b>Media yuklashni boshlash uchun uning havolasini yuboring!</b>"
+            "🎧 <b>Assalomu alaykum! @MeningBotim ga Xush kelibsiz.</b>\n\n"
+            "Bu bot orqali siz:\n"
+            "🔥 <b>Trenddagi Top Musiqalarni</b> tinglashingiz,\n"
+            "🔍 <b>Istalgan qo'shiqni</b> nomini yozib topishingiz,\n"
+            "📥 <b>Instagram, TikTok, YouTube</b> videolarini yuklashingiz mumkin.\n\n"
+            "👇 <b>Qo'shiq topish uchun nomini yozing yoki quyidagi buyruqlardan foydalaning:</b>"
         ),
         "search": "🔍 <b>Qidirilmoqda...</b>",
         "not_found": "⚠️ <b>Afsuski musiqa topilmadi.</b>",
@@ -53,26 +40,21 @@ TEXTS = {
         "sub_check": "⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:",
         "btn_sub": "➕ A'zo bo'lish",
         "btn_verify": "✅ Tasdiqlash",
-        "btn_video": "🎬 Video",
-        "btn_audio": "🎵 Audio (MP3)",
         "choose": "Formatni tanlang:",
-        "top_music": "🔥 <b>TOP 10 (Trend):</b>",
-        "new_music": "🆕 <b>Yangi Musiqalar:</b>",
+        "video": "🎬 Video",
+        "audio": "🎵 Audio (MP3)",
+        "top_title": "🔥 <b>O'zbekiston TOP 10 (Trend):</b>",
+        "new_title": "🆕 <b>Jahon Xitlari (Yangi):</b>",
         "lang_set": "✅ Til o'zgartirildi: O'zbekcha"
     },
     "ru": {
         "welcome": (
-            "🔥 <b>Приветствую! Добро пожаловать в @MeningBotim.</b>\n\n"
-            "Через бота можно скачать:\n"
-            "• <b>Instagram</b> - посты, сторис, reels;\n"
-            "• <b>YouTube</b> - видео, шортс, аудио;\n"
-            "• <b>TikTok</b> - видео без водяных знаков;\n"
-            "• <b>Facebook, Pinterest, Likee</b> - контент;\n\n"
-            "<b>Функция Shazam:</b>\n"
-            "• Поиск по названию или исполнителю\n"
-            "• Поиск по тексту песни\n"
-            "• Голосовые сообщения\n\n"
-            "🚀 <b>Отправьте ссылку для начала загрузки!</b>"
+            "🎧 <b>Привет! Добро пожаловать в @MeningBotim.</b>\n\n"
+            "Здесь вы можете:\n"
+            "🔥 Слушать <b>ТОП Треки</b>,\n"
+            "🔍 Найти <b>любую песню</b> по названию,\n"
+            "📥 Скачать видео с <b>Instagram, TikTok, YouTube</b>.\n\n"
+            "👇 <b>Напишите название песни для поиска или выберите команду:</b>"
         ),
         "search": "🔍 <b>Поиск...</b>",
         "not_found": "⚠️ <b>Музыка не найдена.</b>",
@@ -82,18 +64,16 @@ TEXTS = {
         "sub_check": "⚠️ Подпишитесь на канал:",
         "btn_sub": "➕ Подписаться",
         "btn_verify": "✅ Проверить",
-        "btn_video": "🎬 Видео",
-        "btn_audio": "🎵 Аудио (MP3)",
         "choose": "Выберите формат:",
-        "top_music": "🔥 <b>TOP 10 (Тренд):</b>",
-        "new_music": "🆕 <b>Новинки:</b>",
+        "video": "🎬 Видео",
+        "audio": "🎵 Аудио (MP3)",
+        "top_title": "🔥 <b>ТОП 10 Узбекистан (Тренд):</b>",
+        "new_title": "🆕 <b>Мировые Хиты (New):</b>",
         "lang_set": "✅ Язык изменен: Русский"
     }
 }
 
-# -----------------------------------------------------------
-# BAZA (LITE)
-# -----------------------------------------------------------
+# --- BAZA ---
 def db_start():
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
@@ -128,9 +108,7 @@ def del_channel(ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("DELETE FROM channels WHERE id=?", (ch_id,)); conn.commit(); conn.close()
 
-# -----------------------------------------------------------
-# MANTIQ
-# -----------------------------------------------------------
+# --- MANTIQ ---
 class AdminState(StatesGroup):
     add_ch_link = State()
 
@@ -145,28 +123,48 @@ async def check_sub(bot, user_id):
         except: pass
     return not_sub
 
-# YUKLASH FUNKSIYASI (Cookies faylini o'zi qidiradi)
+# --- SUPER YUKLASH FUNKSIYASI (Musiqa uchun optimallashtirilgan) ---
 async def dl_media(url, user_id, type="video"):
     ext = "mp4" if type == "video" else "mp3"
     fn = f"{DOWNLOAD_PATH}/{user_id}.{ext}"
-    cf = 'cookies.txt' if os.path.exists('cookies.txt') else None
     
     opts = {
-        'outtmpl': fn, 'quiet': True, 'noplaylist': True, 'cookiefile': cf,
-        'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        'outtmpl': fn,
+        'noplaylist': True,
+        'quiet': True,
+        # Cookies fayli SHART EMAS, chunki biz User-Agent ishlatamiz
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
     }
-    if type == "audio": opts['format'] = 'bestaudio/best'
-    else: opts['format'] = 'bestvideo+bestaudio/best'
+    if type == "audio": 
+        opts['format'] = 'bestaudio/best'
+        opts['postprocessors'] = [{  # MP3 ga aylantirish (Sifatni oshiradi)
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    else: 
+        opts['format'] = 'bestvideo+bestaudio/best'
     
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            return fn, info.get('title', 'Media')
-    except: return None, None
+            return fn if type == "video" else fn.replace(".mp3", ".mp3"), info.get('title', 'Media')
+    except Exception as e: 
+        print(e)
+        return None, None
 
+# --- QIDIRUV (TOP MUSIQA) ---
 async def search_yt(q, limit=10):
-    cf = 'cookies.txt' if os.path.exists('cookies.txt') else None
-    opts = {'quiet': True, 'cookiefile': cf, 'noplaylist': True, 'extract_flat': True, 'default_search': f'ytsearch{limit}'}
+    opts = {
+        'quiet': True, 
+        'noplaylist': True, 
+        'extract_flat': True, 
+        'default_search': f'ytsearch{limit}',
+        'http_headers': {'User-Agent': 'Mozilla/5.0'}
+    }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             res = ydl.extract_info(f"ytsearch{limit}:{q}", download=False)
@@ -189,9 +187,9 @@ async def start(m: Message, bot: Bot):
     
     await bot.set_my_commands([
         BotCommand(command="start", description="Restart"),
-        BotCommand(command="top", description="🔥 Top"),
-        BotCommand(command="new", description="🆕 New"),
-        BotCommand(command="lang", description="🌐 Til"),
+        BotCommand(command="top", description="🔥 TOP Uzbekistan"),
+        BotCommand(command="new", description="🌍 TOP World"),
+        BotCommand(command="lang", description="🌐 Til/Language"),
     ])
     await m.answer(TEXTS[l]["welcome"], disable_web_page_preview=True)
 
@@ -213,49 +211,57 @@ async def check_c(c: CallbackQuery, bot: Bot):
     if await check_sub(bot, c.from_user.id): await c.answer("❌", show_alert=True)
     else: await c.message.delete(); await start(c.message, bot)
 
-# TOP & NEW
+# TOP & NEW (Musica qidirishni avtomatlashtirish)
 @dp.message(Command("top"))
 async def top_m(m: Message):
     l = get_lang(m.from_user.id)
     await m.answer(TEXTS[l]["search"])
-    res = await search_yt("Global Top Hits 2025", 10)
+    # O'zbekistonning eng zo'r qo'shiqlarini qidiradi
+    res = await search_yt("Uzbekistan Top 10 Music Hits 2025", 10)
     await show_res(m, res, TEXTS[l]["top_title"])
 
 @dp.message(Command("new"))
 async def new_m(m: Message):
     l = get_lang(m.from_user.id)
     await m.answer(TEXTS[l]["search"])
-    res = await search_yt("New Songs 2025", 10)
+    # Jahon xitlarini qidiradi
+    res = await search_yt("Global Top Songs 2025", 10)
     await show_res(m, res, TEXTS[l]["new_title"])
 
 async def show_res(m, res, title):
     if not res: return await m.answer("❌")
     kb = []
-    for v in res: kb.append([InlineKeyboardButton(text=f"🎵 {v['title'][:30]}", callback_data=f"m:{v['id']}")])
+    for v in res: kb.append([InlineKeyboardButton(text=f"🎵 {v['title'][:35]}", callback_data=f"m:{v['id']}")])
     kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
     await m.answer(title, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# LINK ORQALI YUKLASH
+# LINK (Video Yuklash)
 @dp.message(F.text.contains("http"))
 async def link_h(m: Message, state: FSMContext, bot: Bot):
     if await check_sub(bot, m.from_user.id): return await m.answer("❌ Sub!")
     l = get_lang(m.from_user.id)
     await state.update_data(url=m.text)
-    kb = [[InlineKeyboardButton(text=TEXTS[l]["btn_video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["btn_audio"], callback_data="aud")]]
+    kb = [[InlineKeyboardButton(text=TEXTS[l]["video"], callback_data="vid"), InlineKeyboardButton(text=TEXTS[l]["audio"], callback_data="aud")]]
     await m.reply(TEXTS[l]["choose"], reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# MUSIQA QIDIRISH
+# ODDIY SEARCH (Qo'shiq qidirish)
 @dp.message(F.text)
 async def search_h(m: Message, bot: Bot):
     if m.text.startswith("/"): return
     if await check_sub(bot, m.from_user.id): return
     l = get_lang(m.from_user.id)
     msg = await m.answer(TEXTS[l]["search"])
-    res = await search_yt(m.text)
+    
+    # Qidiruv
+    res = await search_yt(m.text, limit=10)
+    
     if not res: return await msg.edit_text(TEXTS[l]["not_found"])
-    kb = [[InlineKeyboardButton(text=f"🎵 {v['title'][:30]}", callback_data=f"m:{v['id']}")] for v in res]
+    
+    kb = []
+    for v in res:
+        kb.append([InlineKeyboardButton(text=f"🎵 {v['title'][:40]}", callback_data=f"m:{v['id']}")])
     kb.append([InlineKeyboardButton(text="❌", callback_data="del")])
-    await msg.edit_text(f"👇 {m.text}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await msg.edit_text(f"👇 <b>{m.text}</b> bo'yicha natijalar:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 # CALLBACKLAR
 @dp.callback_query(F.data.in_({"vid", "aud"}))
@@ -266,7 +272,7 @@ async def dl_call(c: CallbackQuery, state: FSMContext):
     t = "video" if c.data == "vid" else "audio"
     msg = await c.message.answer(TEXTS[l]["downloading"])
     fp, ti = await dl_media(d.get("url"), c.from_user.id, t)
-    if fp:
+    if fp and os.path.exists(fp):
         try:
             await msg.edit_text(TEXTS[l]["sending"])
             f = FSInputFile(fp)
@@ -274,9 +280,10 @@ async def dl_call(c: CallbackQuery, state: FSMContext):
             if t == "video": await c.message.answer_video(f, caption=cap)
             else: await c.message.answer_audio(f, caption=cap)
             await msg.delete()
-        except: await msg.edit_text(TEXTS[l]["error"])
-        finally: os.remove(fp)
-    else: await msg.edit_text(TEXTS[l]["not_found"])
+        except: await msg.edit_text("Error sending file")
+        finally: 
+            if os.path.exists(fp): os.remove(fp)
+    else: await msg.edit_text(TEXTS[l]["error"])
     await state.clear()
 
 @dp.callback_query(F.data.startswith("m:"))
@@ -285,14 +292,18 @@ async def m_dl(c: CallbackQuery):
     await c.message.delete()
     l = get_lang(c.from_user.id)
     msg = await c.message.answer(TEXTS[l]["downloading"])
+    
+    # Faqat AUDIO yuklaymiz
     fp, ti = await dl_media(url, c.from_user.id, "audio")
-    if fp:
+    
+    if fp and os.path.exists(fp):
         try:
             await msg.edit_text(TEXTS[l]["sending"])
             await c.message.answer_audio(FSInputFile(fp), caption=f"🎵 {ti}\n🤖 @{(await c.bot.get_me()).username}")
             await msg.delete()
-        except: await msg.edit_text(TEXTS[l]["error"])
-        finally: os.remove(fp)
+        except: await msg.edit_text("Error sending file")
+        finally: 
+            if os.path.exists(fp): os.remove(fp)
     else: await msg.edit_text(TEXTS[l]["error"])
 
 @dp.callback_query(F.data == "del")
@@ -325,7 +336,7 @@ async def del_c(c: CallbackQuery):
 @dp.callback_query(F.data.startswith("rm:"))
 async def rm_c(c: CallbackQuery): del_channel(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
 
-# SERVER (UptimeRobot uchun)
+# SERVER
 async def health(r): return web.Response(text="OK")
 async def web_start():
     app = web.Application(); app.router.add_get('/', health)
