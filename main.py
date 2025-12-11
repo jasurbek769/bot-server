@@ -11,13 +11,13 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiohttp import web # Render uchun kerak
+from aiohttp import web
 
 # -----------------------------------------------------------
-# 1. SOZLAMALAR (O'ZGARTIRISH SHART!)
+# 1. SOZLAMALAR
 # -----------------------------------------------------------
 TOKEN = "7474552293:AAGd1oB9nJGiJKI9MjPMoxN2Oosebvli6Jg"
-ADMIN_ID = 7950261926  # <-- SHU YERGA O'Z ID RAQAMINGIZNI YOZING!
+ADMIN_ID = 7950261926  # <-- O'Z ID RAQAMINGIZNI YOZING!
 
 dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
@@ -82,9 +82,7 @@ class AdminState(StatesGroup):
     add_ch_id = State()
 
 async def check_sub_status(bot: Bot, user_id: int):
-    # Adminni tekshirmaymiz
     if user_id == ADMIN_ID: return []
-    
     channels = get_channels_db()
     not_subbed = []
     for link, ch_id in channels:
@@ -92,16 +90,12 @@ async def check_sub_status(bot: Bot, user_id: int):
             member = await bot.get_chat_member(chat_id=ch_id, user_id=user_id)
             if member.status in ['left', 'kicked']:
                 not_subbed.append((link, ch_id))
-        except: 
-            # Agar bot admin bo'lmasa yoki xato bo'lsa, o'tkazib yuboramiz
-            continue
+        except: continue
     return not_subbed
 
 async def download_video(url, user_id):
     file_name = f"{DOWNLOAD_PATH}/{user_id}_video.mp4"
-    # Cookies bor yoki yo'qligini tekshirish
     cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
-    
     ydl_opts = {
         'format': 'best',
         'outtmpl': file_name,
@@ -122,17 +116,11 @@ async def download_video(url, user_id):
 @dp.message(CommandStart())
 async def start_handler(message: Message, bot: Bot):
     add_user(message.from_user.id)
-    
-    # Majburiy obunani tekshirish
     not_subbed = await check_sub_status(bot, message.from_user.id)
     if not_subbed:
         kb = [[InlineKeyboardButton(text="➕ A'zo bo'lish", url=l)] for l, _ in not_subbed]
         kb.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_sub")])
-        await message.answer(
-            f"Assalomu alaykum, {message.from_user.full_name}!\n"
-            "Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:", 
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
-        )
+        await message.answer("Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     else:
         await message.answer("✅ Botga xush kelibsiz! Menga link yuboring.")
 
@@ -142,7 +130,20 @@ async def check_callback(call: CallbackQuery, bot: Bot):
         await call.answer("❌ Hali a'zo bo'lmadingiz!", show_alert=True)
     else:
         await call.message.delete()
-        await call.message.answer("🎉 Rahmat! Endi link yuborishingiz mumkin.")
+        await call.message.answer("🎉 Rahmat! Link yuborishingiz mumkin.")
+
+# --- YANGI FUNKSIYA: ID ANIQLOVCHI (FAQAT ADMIN UCHUN) ---
+@dp.message(F.forward_from_chat)
+async def get_channel_id_handler(message: Message):
+    # Faqat admin uchun ishlaydi
+    if message.from_user.id == ADMIN_ID:
+        chat_id = message.forward_from_chat.id
+        title = message.forward_from_chat.title
+        await message.reply(
+            f"📢 <b>Kanal nomi:</b> {title}\n"
+            f"🆔 <b>ID:</b> <code>{chat_id}</code>\n\n"
+            "👆 ID ustiga bossangiz nusxalanadi."
+        )
 
 # --- ADMIN PANEL ---
 @dp.message(Command("admin"))
@@ -155,18 +156,14 @@ async def admin_panel(message: Message):
              InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="del_ch")]
         ])
         await message.answer(f"👑 <b>Admin Panel</b>\n👥 Obunachilar: {get_users_count()} ta", reply_markup=kb)
-    else:
-        # Admin bo'lmasa, bildirmaymiz
-        pass
 
 @dp.callback_query(F.data == "stat")
 async def show_stat(call: CallbackQuery):
     await call.answer(f"Jami foydalanuvchilar: {get_users_count()}", show_alert=True)
 
-# REKLAMA
 @dp.callback_query(F.data == "broadcast")
 async def ask_broadcast(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Reklama xabarini yuboring (Rasm, Video yoki Matn):")
+    await call.message.answer("Reklama xabarini yuboring:")
     await state.set_state(AdminState.broadcast)
 
 @dp.message(AdminState.broadcast)
@@ -183,7 +180,6 @@ async def send_broadcast(message: Message, state: FSMContext):
     await message.answer(f"✅ Yuborildi: {c} ta")
     await state.clear()
 
-# KANAL QO'SHISH
 @dp.callback_query(F.data == "add_ch")
 async def ask_ch(call: CallbackQuery, state: FSMContext):
     await call.message.answer("Kanal LINKINI yuboring (masalan: https://t.me/kanalim):")
@@ -192,14 +188,20 @@ async def ask_ch(call: CallbackQuery, state: FSMContext):
 @dp.message(AdminState.add_ch_link)
 async def get_ch_l(message: Message, state: FSMContext):
     await state.update_data(link=message.text)
-    await message.answer("Endi Kanal ID sini yuboring (masalan: -10012345678):\n\n⚠️ Bot kanalda ADMIN bo'lishi shart!")
+    await message.answer("Endi o'sha kanaldan menga bitta xabar <b>FORWARD</b> qiling (yoki IDni qo'lda yozing):")
     await state.set_state(AdminState.add_ch_id)
 
 @dp.message(AdminState.add_ch_id)
 async def get_ch_i(message: Message, state: FSMContext):
+    # Agar forward qilsa, IDni o'zi oladi
+    if message.forward_from_chat:
+        ch_id = str(message.forward_from_chat.id)
+    else:
+        ch_id = message.text
+
     d = await state.get_data()
-    add_channel_db(d.get("link"), message.text)
-    await message.answer("✅ Kanal majburiy obunaga qo'shildi!")
+    add_channel_db(d.get("link"), ch_id)
+    await message.answer(f"✅ Kanal qo'shildi!\nID: {ch_id}\nLink: {d.get('link')}")
     await state.clear()
 
 @dp.callback_query(F.data == "del_ch")
@@ -217,14 +219,11 @@ async def del_ch_do(call: CallbackQuery):
 # LINKNI USHLASH
 @dp.message(F.text.contains("http"))
 async def vid_handler(message: Message, bot: Bot):
-    # Majburiy obuna tekshiruvi
     if await check_sub_status(bot, message.from_user.id):
         await message.answer("❌ Botdan foydalanish uchun kanallarga a'zo bo'ling! /start ni bosing.")
         return
-
     msg = await message.reply("⏳ <b>Video yuklanmoqda...</b>")
     file_path, title = await download_video(message.text, message.from_user.id)
-    
     if file_path and os.path.exists(file_path):
         try:
             await msg.edit_text("📤 Yuborilmoqda...")
@@ -233,33 +232,26 @@ async def vid_handler(message: Message, bot: Bot):
         except Exception as e: await msg.edit_text(f"Xatolik: {e}")
         finally:
             if os.path.exists(file_path): os.remove(file_path)
-    else:
-        await msg.edit_text("❌ Kechirasiz, bu videoni yuklay olmadim.\nYouTube bo'lsa Cookies kerak bo'lishi mumkin.")
+    else: await msg.edit_text("❌ Yuklay olmadim. Linkni tekshiring.")
 
 # -----------------------------------------------------------
-# 5. RENDER UCHUN WEB-SERVER (Bot o'chib qolmasligi uchun)
+# 5. RENDER UCHUN WEB-SERVER
 # -----------------------------------------------------------
-async def health_check(request):
-    return web.Response(text="Bot is running!")
+async def health_check(request): return web.Response(text="Bot is running!")
 
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 8080)) # Render bergan portni oladi
+    port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
 async def main():
     db_start()
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    
-    # Ikkita ishni birdan boshlaymiz: Bot + Web Server
-    await asyncio.gather(
-        dp.start_polling(bot),
-        start_web_server()
-    )
+    await asyncio.gather(dp.start_polling(bot), start_web_server())
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
