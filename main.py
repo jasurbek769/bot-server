@@ -2,12 +2,13 @@ import asyncio
 import logging
 import sys
 import os
-import random
 import sqlite3
-from aiogram import Bot, Dispatcher, F
+import random
+from datetime import datetime
+from aiogram import Bot, Dispatcher, F, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -17,41 +18,81 @@ from dotenv import load_dotenv
 from gtts import gTTS
 from deep_translator import GoogleTranslator
 
-# --- XAVFSIZLIK QISMI ---
-# 1. Kompyuterda ishlayotganda .env faylidan tokenni o'qiydi
-load_dotenv()
+# -----------------------------------------------------------
+# 1. XAVFSIZLIK VA SOZLAMALAR
+# -----------------------------------------------------------
+load_dotenv() # .env faylini o'qish (Lokalda ishlash uchun)
 
-# 2. Tokenni o'zgaruvchidan olamiz (Kod ichida raqam yozilmaydi!)
-TOKEN = os.getenv("BOT_TOKEN")
+# Token va ID kodda ko'rinmaydi!
+TOKEN = os.getenv("BOT_TOKEN") 
 ADMIN_ID = os.getenv("ADMIN_ID")
 
-# Admin ID ni songa aylantiramiz (xatolik bo'lmasligi uchun)
-if ADMIN_ID:
+if not TOKEN:
+    print("DIQQAT: Token topilmadi! Serverga kiritish kerak.")
+    # Agar token bo'lmasa, kod to'xtamasligi uchun soxta qiymat (faqat test uchun)
+    TOKEN = "TOKEN_YOQ"
+
+# Admin ID ni songa aylantiramiz
+try:
     ADMIN_ID = int(ADMIN_ID)
-else:
-    print("DIQQAT: ADMIN_ID topilmadi!")
+except:
+    ADMIN_ID = 0
 
 dp = Dispatcher()
 DOWNLOAD_PATH = "downloads"
 if not os.path.exists(DOWNLOAD_PATH): os.makedirs(DOWNLOAD_PATH)
 
-# --- BAZA ---
+# -----------------------------------------------------------
+# 2. BAZA (FOYDALANUVCHI TARIXI BILAN)
+# -----------------------------------------------------------
 def db_start():
     conn = sqlite3.connect("bot.db")
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
+    # Users: ID, Username, Ism, Qo'shilgan vaqti
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY, 
+            username TEXT, 
+            full_name TEXT, 
+            joined_at TEXT
+        )
+    """)
+    # Channels: Link, ID
     cur.execute("CREATE TABLE IF NOT EXISTS channels (link TEXT, id TEXT)")
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
-def add_user(user_id):
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users VALUES (?)", (user_id,))
-    conn.commit(); conn.close()
+def add_user(user_id, username, full_name):
+    conn = sqlite3.connect("bot.db")
+    cur = conn.cursor()
+    # Bugungi sana
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT OR IGNORE INTO users (user_id, username, full_name, joined_at) VALUES (?, ?, ?, ?)", 
+                (user_id, username, full_name, date))
+    conn.commit()
+    conn.close()
 
-def get_channels_db():
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT * FROM channels"); return cur.fetchall()
+def get_stats():
+    conn = sqlite3.connect("bot.db")
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users")
+    total = cur.fetchone()[0]
+    # Bugun qo'shilganlar
+    today = datetime.now().strftime("%Y-%m-%d")
+    cur.execute("SELECT COUNT(*) FROM users WHERE joined_at LIKE ?", (f"{today}%",))
+    daily = cur.fetchone()[0]
+    conn.close()
+    return total, daily
 
+def get_all_users():
+    conn = sqlite3.connect("bot.db")
+    cur = conn.cursor()
+    cur.execute("SELECT user_id FROM users")
+    users = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return users
+
+# Kanal funksiyalari
 def add_channel_db(link, ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("INSERT INTO channels VALUES (?, ?)", (link, ch_id)); conn.commit(); conn.close()
@@ -60,24 +101,32 @@ def del_channel_db(ch_id):
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
     cur.execute("DELETE FROM channels WHERE id = ?", (ch_id,)); conn.commit(); conn.close()
 
-def get_users_count():
+def get_channels_db():
     conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM users"); return cur.fetchone()[0]
+    cur.execute("SELECT * FROM channels"); return cur.fetchall()
 
-def get_all_users():
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT user_id FROM users"); return [u[0] for u in cur.fetchall()]
-
-# --- STATES ---
+# -----------------------------------------------------------
+# 3. STATES (HOLATLAR)
+# -----------------------------------------------------------
 class ServiceState(StatesGroup):
+    # Rasm
     image_prompt = State()
+    # Ovoz (TTS)
+    tts_lang = State()
     tts_text = State()
+    # Tarjima
+    trans_lang = State()
     trans_text = State()
+    # Aloqa
     contact_admin = State()
-    add_ch_link = State()
-    broadcast = State()
 
-# --- YORDAMCHI ---
+class AdminState(StatesGroup):
+    broadcast = State()
+    add_ch_link = State()
+
+# -----------------------------------------------------------
+# 4. YORDAMCHI FUNKSIYALAR
+# -----------------------------------------------------------
 async def check_sub(bot, user_id):
     if user_id == ADMIN_ID: return []
     channels = get_channels_db()
@@ -89,167 +138,271 @@ async def check_sub(bot, user_id):
         except: pass
     return not_sub
 
+# --- POLLINATIONS.AI (RASM) ---
 async def generate_image_api(prompt):
     seed = random.randint(1, 10000)
-    safe_prompt = prompt.replace(" ", "%20")
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed={seed}&nologo=true"
+    prompt_safe = prompt.replace(" ", "%20")
+    url = f"https://image.pollinations.ai/prompt/{prompt_safe}?width=1024&height=1024&seed={seed}&nologo=true"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status == 200: return await resp.read()
     except: return None
+    return None
 
-# --- HANDLERS ---
+# -----------------------------------------------------------
+# 5. HANDLERS
+# -----------------------------------------------------------
+
 @dp.message(CommandStart())
 async def start_handler(message: Message, bot: Bot):
-    add_user(message.from_user.id)
+    add_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    
+    # Majburiy obuna
     ns = await check_sub(bot, message.from_user.id)
     if ns:
-        kb = [[InlineKeyboardButton(text="➕ A'zo bo'lish", url=l)] for l, _ in ns]
+        kb = [[InlineKeyboardButton(text="➕ Kanalga qo'shilish", url=l)] for l, _ in ns]
         kb.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_sub")])
-        await message.answer("⚠️ Botdan foydalanish uchun kanalga a'zo bo'ling:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        await message.answer("⚠️ <b>Botdan foydalanish uchun kanalga a'zo bo'ling:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
         return
 
+    # TEPADA CHIQUVCHI 3 TUGMA (INLINE)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 Rasm Yasash", callback_data="srv_img"), InlineKeyboardButton(text="🗣 Ovoz (TTS)", callback_data="srv_tts")],
-        [InlineKeyboardButton(text="🌍 Tarjimon", callback_data="srv_tr"), InlineKeyboardButton(text="📞 Admin", callback_data="contact")]
+        [InlineKeyboardButton(text="🎨 Rasm Yasash", callback_data="srv_image")],
+        [InlineKeyboardButton(text="🗣 Matnni Ovozga Aylantirish", callback_data="srv_tts")],
+        [InlineKeyboardButton(text="🌍 Tarjimon", callback_data="srv_trans")],
+        [InlineKeyboardButton(text="📞 Admin bilan aloqa", callback_data="contact_admin")]
     ])
+    
+    # Admin bo'lsa panel chiqadi
     if message.from_user.id == ADMIN_ID:
         kb.inline_keyboard.append([InlineKeyboardButton(text="👑 Admin Panel", callback_data="admin_panel")])
-    
-    await message.answer(f"👋 <b>Salom {message.from_user.full_name}!</b>\nXizmatni tanlang:", reply_markup=kb)
+
+    await message.answer(
+        f"👋 <b>Assalomu alaykum {message.from_user.full_name}!</b>\n\n"
+        "Men Universal AI Yordamchiman. Xizmat turini tanlang 👇",
+        reply_markup=kb
+    )
 
 @dp.callback_query(F.data == "check_sub")
-async def check_cb(c: CallbackQuery, bot: Bot):
-    if await check_sub(bot, c.from_user.id): await c.answer("❌ A'zo bo'lmadingiz!", show_alert=True)
-    else: await c.message.delete(); await start_handler(c.message, bot)
+async def check_cb(call: CallbackQuery, bot: Bot):
+    if await check_sub(bot, call.from_user.id): await call.answer("❌ Hali a'zo bo'lmadingiz!", show_alert=True)
+    else: await call.message.delete(); await start_handler(call.message, bot)
 
-@dp.callback_query(F.data == "back")
-async def back_home(c: CallbackQuery, state: FSMContext):
-    await state.clear(); await c.message.delete(); await start_handler(c.message, c.bot)
+@dp.callback_query(F.data == "back_home")
+async def go_home(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await start_handler(call.message, call.bot)
 
-# --- 1. RASM ---
-@dp.callback_query(F.data == "srv_img")
-async def ask_img(c: CallbackQuery, state: FSMContext):
-    await c.message.edit_text("🎨 <b>Nima chizib beray?</b> (Inglizcha yozing):", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+# --- 1. AI RASM YASASH ---
+@dp.callback_query(F.data == "srv_image")
+async def srv_image_start(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text(
+        "🎨 <b>Rasm Yasash Bo'limi</b>\n\nNimani chizib beray? Tasvirni yozing:\n<i>(Masalan: O'zbekiston bayrog'ini ko'tarib turgan kosmonavt)</i>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_home")]])
+    )
     await state.set_state(ServiceState.image_prompt)
 
 @dp.message(ServiceState.image_prompt)
-async def gen_img(m: Message, state: FSMContext):
-    msg = await m.reply("🎨 Chizilmoqda...")
-    img = await generate_image_api(m.text)
-    if img:
+async def process_image(message: Message, state: FSMContext):
+    msg = await message.reply("🎨 <b>Chizilmoqda...</b>")
+    img_bytes = await generate_image_api(message.text)
+    
+    if img_bytes:
         await msg.delete()
-        await m.answer_photo(BufferedInputFile(img, "img.jpg"), caption=f"🖼 {m.text}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bosh menyu", callback_data="back")]]))
-    else: await msg.edit_text("Xatolik.")
+        file = BufferedInputFile(img_bytes, filename="art.jpg")
+        await message.answer_photo(
+            photo=file, 
+            caption=f"🖼 <b>So'rov:</b> {message.text}\n🤖 @{(await message.bot.get_me()).username}",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bosh menyu", callback_data="back_home")]])
+        )
+    else:
+        await msg.edit_text("❌ Xatolik.")
     await state.clear()
 
-# --- 2. OVOZ (TTS) ---
+# --- 2. MATNNI OVOZGA AYLANTIRISH (TTS) ---
 @dp.callback_query(F.data == "srv_tts")
-async def ask_tts(c: CallbackQuery, state: FSMContext):
-    await c.message.edit_text("🗣 <b>Matnni yozing (O'zbek, Rus yoki Ingliz):</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+async def srv_tts_lang(call: CallbackQuery, state: FSMContext):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="tts:uz"), InlineKeyboardButton(text="🇷🇺 Русский", callback_data="tts:ru")],
+        [InlineKeyboardButton(text="🇬🇧 English", callback_data="tts:en")],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_home")]
+    ])
+    await call.message.edit_text("🗣 <b>Tilni tanlang:</b>", reply_markup=kb)
+    await state.set_state(ServiceState.tts_lang)
+
+@dp.callback_query(F.data.startswith("tts:"))
+async def srv_tts_text(call: CallbackQuery, state: FSMContext):
+    lang = call.data.split(":")[1]
+    await state.update_data(lang=lang)
+    await call.message.edit_text(f"📝 <b>Matnni yozing ({lang}):</b>")
     await state.set_state(ServiceState.tts_text)
 
 @dp.message(ServiceState.tts_text)
-async def gen_tts(m: Message, state: FSMContext):
-    msg = await m.reply("🗣 Ovoz yozilmoqda...")
+async def process_tts(message: Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang")
+    msg = await message.reply("🗣 <b>Ovoz yozilmoqda...</b>")
+    
     try:
-        tts = gTTS(text=m.text, lang='en', slow=False) # Universal bo'lishi uchun EN, yoki avto aniqlash qo'shish mumkin
-        path = f"{DOWNLOAD_PATH}/{m.from_user.id}.mp3"
-        tts.save(path)
+        # gTTS orqali ovoz yaratish
+        tts = gTTS(text=message.text, lang=lang, slow=False)
+        filename = f"{DOWNLOAD_PATH}/{message.from_user.id}.mp3"
+        tts.save(filename)
+        
         await msg.delete()
-        await m.answer_audio(FSInputFile(path), caption="🔊 Tayyor", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
-        os.remove(path)
-    except: await msg.edit_text("Xatolik.")
+        await message.answer_audio(
+            audio=FSInputFile(filename),
+            caption=f"🗣 <b>Matn:</b> {message.text[:50]}...",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bosh menyu", callback_data="back_home")]])
+        )
+        os.remove(filename)
+    except Exception as e:
+        await msg.edit_text(f"❌ Xatolik: {e}")
     await state.clear()
 
 # --- 3. TARJIMON ---
-@dp.callback_query(F.data == "srv_tr")
-async def ask_tr(c: CallbackQuery, state: FSMContext):
-    await c.message.edit_text("🌍 <b>Tarjima uchun matn yozing:</b>\n(Avtomatik aniqlab O'zbekchaga o'giradi)", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+@dp.callback_query(F.data == "srv_trans")
+async def srv_trans_lang(call: CallbackQuery, state: FSMContext):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇬🇧 Inglizchaga", callback_data="tr:en"), InlineKeyboardButton(text="🇷🇺 Ruschaga", callback_data="tr:ru")],
+        [InlineKeyboardButton(text="🇺🇿 O'zbekchaga", callback_data="tr:uz")],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_home")]
+    ])
+    await call.message.edit_text("🌍 <b>Qaysi tilga tarjima qilay?</b>", reply_markup=kb)
+    await state.set_state(ServiceState.trans_lang)
+
+@dp.callback_query(F.data.startswith("tr:"))
+async def srv_trans_text(call: CallbackQuery, state: FSMContext):
+    target = call.data.split(":")[1]
+    await state.update_data(target=target)
+    await call.message.edit_text("📝 <b>Tarjima uchun matn yozing:</b>")
     await state.set_state(ServiceState.trans_text)
 
 @dp.message(ServiceState.trans_text)
-async def gen_tr(m: Message, state: FSMContext):
+async def process_trans(message: Message, state: FSMContext):
+    data = await state.get_data()
+    target = data.get("target")
+    
     try:
-        res = GoogleTranslator(source='auto', target='uz').translate(m.text)
-        await m.reply(f"🌍 <b>Tarjima:</b>\n\n{res}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
-    except: await m.reply("Xatolik.")
+        translated = GoogleTranslator(source='auto', target=target).translate(message.text)
+        await message.reply(
+            f"🌍 <b>Tarjima ({target}):</b>\n\n<code>{translated}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Bosh menyu", callback_data="back_home")]])
+        )
+    except:
+        await message.reply("❌ Xatolik.")
     await state.clear()
 
-# --- ALOQA VA ADMIN ---
-@dp.callback_query(F.data == "contact")
-async def contact(c: CallbackQuery, state: FSMContext):
-    await c.message.edit_text("✍️ Xabar yozing:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙", callback_data="back")]]))
+# --- ALOQA VA ADMIN JAVOBI ---
+@dp.callback_query(F.data == "contact_admin")
+async def contact_admin(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("✍️ <b>Admin uchun xabaringizni yozing:</b>\n(Taklif, shikoyat yoki savol)", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_home")]]))
     await state.set_state(ServiceState.contact_admin)
 
 @dp.message(ServiceState.contact_admin)
-async def send_admin(m: Message, state: FSMContext, bot: Bot):
+async def send_to_admin(message: Message, state: FSMContext, bot: Bot):
     if ADMIN_ID:
-        await bot.send_message(ADMIN_ID, f"📨 <b>Xabar:</b>\n{m.from_user.full_name} (ID: <code>{m.from_user.id}</code>):\n{m.text}")
-        await m.reply("✅ Yuborildi.")
+        try:
+            # Adminga xabar yuborish (ID si bilan, javob berish oson bo'lishi uchun)
+            await bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📨 <b>YANGI XABAR!</b>\n\n👤 <b>Kimdan:</b> {message.from_user.full_name}\n🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n🔗 @{message.from_user.username}\n\n📄 <b>Matn:</b>\n{message.text}\n\n<i>Javob berish uchun shu xabarga Reply qiling.</i>"
+            )
+            await message.reply("✅ Xabar Adminga yuborildi! Javobni kuting.")
+        except:
+            await message.reply("❌ Adminga yuborib bo'lmadi.")
+    else:
+        await message.reply("❌ Admin ID sozlanmagan.")
     await state.clear()
 
 @dp.message(F.reply_to_message)
-async def reply_user(m: Message, bot: Bot):
-    if m.from_user.id == ADMIN_ID:
+async def admin_reply(message: Message, bot: Bot):
+    if message.from_user.id == ADMIN_ID:
         try:
-            uid = int(m.reply_to_message.text.split("ID:")[1].split(")")[0].replace("<code>", "").replace("</code>", "").strip())
-            await bot.send_message(uid, f"☎️ <b>Admin javobi:</b>\n{m.text}")
-            await m.reply("Ketdi.")
-        except: pass
+            # Xabar ichidan ID ni qidirib topish
+            orig_text = message.reply_to_message.text
+            user_id = int(orig_text.split("ID:")[1].split("\n")[0].replace("<code>", "").replace("</code>", "").strip())
+            
+            await bot.send_message(user_id, f"☎️ <b>ADMINDAN JAVOB:</b>\n\n{message.text}")
+            await message.reply("✅ Javob foydalanuvchiga yuborildi.")
+        except:
+            await message.reply("❌ ID topilmadi yoki foydalanuvchi botni bloklagan.")
 
 # --- ADMIN PANEL ---
 @dp.callback_query(F.data == "admin_panel")
-async def adm_p(c: CallbackQuery):
-    if c.from_user.id != ADMIN_ID: return
+async def admin_dashboard(call: CallbackQuery):
+    if call.from_user.id != ADMIN_ID: return
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Stat", callback_data="stat"), InlineKeyboardButton(text="📨 Reklama", callback_data="broad")],
-        [InlineKeyboardButton(text="➕ Kanal", callback_data="add_ch"), InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_ch")],
-        [InlineKeyboardButton(text="🔙 Chiqish", callback_data="back")]
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="stat"), InlineKeyboardButton(text="📨 Reklama", callback_data="broadcast")],
+        [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch"), InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="del_ch")],
+        [InlineKeyboardButton(text="🔙 Chiqish", callback_data="back_home")]
     ])
-    await c.message.edit_text("Admin Panel:", reply_markup=kb)
+    await call.message.edit_text("👑 <b>Admin Boshqaruv Paneli</b>", reply_markup=kb)
 
 @dp.callback_query(F.data == "stat")
-async def stat(c: CallbackQuery): await c.answer(f"Odamlar: {get_users_count()}", show_alert=True)
+async def show_stat(call: CallbackQuery):
+    total, daily = get_stats()
+    await call.answer(f"👥 Jami: {total}\n📅 Bugun: {daily}", show_alert=True)
 
-@dp.callback_query(F.data == "broad")
-async def broad(c: CallbackQuery, state: FSMContext):
-    await c.message.answer("Reklama yuboring:"); await state.set_state(AdminState.broadcast)
+@dp.callback_query(F.data == "broadcast")
+async def start_broadcast(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("📢 <b>Reklama xabarini yuboring (Rasm/Video/Matn):</b>")
+    await state.set_state(AdminState.broadcast)
 
 @dp.message(AdminState.broadcast)
-async def send_broad(m: Message, state: FSMContext):
-    u = get_all_users(); await m.answer("Ketdi..."); 
-    for i in u:
-        try: await m.copy_to(i); await asyncio.sleep(0.05)
+async def process_broadcast(message: Message, state: FSMContext):
+    users = get_all_users()
+    await message.reply(f"🚀 Xabar {len(users)} kishiga yuborilmoqda...")
+    count = 0
+    for user_id in users:
+        try:
+            await message.copy_to(chat_id=user_id)
+            count += 1
+            await asyncio.sleep(0.05)
         except: pass
-    await m.answer("Tugadi."); await state.clear()
+    await message.reply(f"✅ <b>{count}</b> ta odamga yetib bordi.")
+    await state.clear()
 
 @dp.callback_query(F.data == "add_ch")
-async def add_c(c: CallbackQuery, state: FSMContext):
-    await c.message.answer("Kanal linki:"); await state.set_state(AdminState.add_ch_link)
+async def add_channel_req(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("🔗 <b>Kanal linkini yuboring (masalan: @kanal yoki https://...):</b>\nBot kanalda admin bo'lishi shart!")
+    await state.set_state(AdminState.add_ch_link)
 
 @dp.message(AdminState.add_ch_link)
-async def save_ch(m: Message, state: FSMContext, bot: Bot):
-    try: 
-        link = m.text
-        if "t.me" in link and not "@" in link: username = "@" + link.split("/")[-1]
-        else: username = link
-        c = await bot.get_chat(username); add_channel_db(link, str(c.id)); await m.answer("Qo'shildi!")
-    except: await m.answer("Xato! Bot adminmi?")
+async def process_add_channel(message: Message, state: FSMContext, bot: Bot):
+    link = message.text.strip()
+    username = link.split("/")[-1] if "/" in link else link
+    if "t.me" not in link and not username.startswith("@"): username = "@" + username
+    
+    try:
+        chat = await bot.get_chat(username)
+        add_channel_db(link, str(chat.id))
+        await message.reply(f"✅ <b>Kanal qo'shildi!</b>\nNomi: {chat.title}\nID: {chat.id}")
+    except Exception as e:
+        await message.reply(f"❌ Xatolik: {e}\nBotni kanalga admin qiling va linkni to'g'ri yozing.")
     await state.clear()
 
 @dp.callback_query(F.data == "del_ch")
-async def del_c(c: CallbackQuery):
-    kb = [[InlineKeyboardButton(text=f"❌ {x[0]}", callback_data=f"rm:{x[1]}")] for x in get_channels_db()]
-    if kb: await c.message.edit_text("Tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    else: await c.answer("Bo'sh")
+async def del_channel_list(call: CallbackQuery):
+    channels = get_channels_db()
+    kb = []
+    for link, ch_id in channels:
+        kb.append([InlineKeyboardButton(text=f"❌ {link}", callback_data=f"rm:{ch_id}")])
+    kb.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="admin_panel")])
+    if not channels: await call.answer("Kanallar yo'q", show_alert=True)
+    else: await call.message.edit_text("O'chirish uchun tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data.startswith("rm:"))
-async def rm_c(c: CallbackQuery): del_channel_db(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
+async def process_del_channel(call: CallbackQuery):
+    del_channel_db(call.data.split(":")[1])
+    await call.answer("O'chirildi!")
+    await call.message.delete()
 
-# --- SERVER ---
-async def health(r): return web.Response(text="OK")
+# --- SERVER (UPTIMEROBOT) ---
+async def health(r): return web.Response(text="Bot is Running!")
 async def web_start():
     app = web.Application(); app.router.add_get('/', health)
     runner = web.AppRunner(app); await runner.setup()
@@ -257,7 +410,11 @@ async def web_start():
 
 async def main():
     db_start()
-    if not TOKEN: return
+    # Tokenni Environment Variable dan oladi (xavfsiz)
+    if TOKEN == "TOKEN_YOQ":
+        print("Bot ishlashi uchun TOKEN kiritish kerak (Render Settings da)!")
+        return
+        
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     await asyncio.gather(dp.start_polling(bot), web_start())
 
