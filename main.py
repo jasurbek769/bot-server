@@ -6,7 +6,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # =========================================================================
 # ⚙️ SOZLAMALAR (O'zingiznikiga almashtiring)
 # =========================================================================
-API_TOKEN = 'BU_YERGA_BOT_TOKEN_QOYING'  # BotFather'dan olingan token
+API_TOKEN = '8315412377:AAGY_9_sQqQQRP8dPWmypdnU7Gr9IGNYsAo'  # BotFather'dan olingan token
 ADMIN_ID = 12345678  # O'zingizning Telegram ID raqamingizni yozing (userinfobot orqali bilsa bo'ladi)
 
 # To'lov tizimi tokenlari (BotFather -> Payments bo'limidan olinadi)
@@ -339,3 +339,4 @@ async def add_money_admin(message: types.Message):
 # =========================================================================
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
+
