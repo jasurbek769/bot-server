@@ -1,290 +1,341 @@
-import asyncio
 import logging
-import sys
-import os
 import sqlite3
-import random
-from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiohttp import web
-import aiohttp
-from dotenv import load_dotenv
-import google.generativeai as genai
-from PIL import Image
-import io
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ContentType
 
-# --- SOZLAMALAR ---
-load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# =========================================================================
+# ⚙️ SOZLAMALAR (O'zingiznikiga almashtiring)
+# =========================================================================
+API_TOKEN = 'BU_YERGA_BOT_TOKEN_QOYING'  # BotFather'dan olingan token
+ADMIN_ID = 12345678  # O'zingizning Telegram ID raqamingizni yozing (userinfobot orqali bilsa bo'ladi)
 
-# Admin ID ni songa o'tkazamiz
-if ADMIN_ID: ADMIN_ID = int(ADMIN_ID)
+# To'lov tizimi tokenlari (BotFather -> Payments bo'limidan olinadi)
+# Agar hozir yo'q bo'lsa, shunchaki bo'sh qoldiring, lekin to'lov ishlamaydi.
+PAYME_TOKEN = "PAYME_TOKEN_YOKI_TEST" 
+CLICK_TOKEN = "CLICK_TOKEN_YOKI_TEST"
 
-# Gemini sozlash
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    print("❌ GEMINI_API_KEY topilmadi!")
+# =========================================================================
+# 📦 MA'LUMOTLAR BAZASI (SQLITE3)
+# =========================================================================
+logging.basicConfig(level=logging.INFO)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
 
-dp = Dispatcher()
-
-# --- BAZA (DATABASE) ---
 def db_start():
-    conn = sqlite3.connect("bot.db")
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
-    cur.execute("CREATE TABLE IF NOT EXISTS channels (link TEXT, id TEXT)")
-    conn.commit(); conn.close()
-
-def add_user(user_id):
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users VALUES (?)", (user_id,)); conn.commit(); conn.close()
-
-def get_all_users():
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT user_id FROM users"); return [u[0] for u in cur.fetchall()]
-
-def add_channel_db(link, ch_id):
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("INSERT INTO channels VALUES (?, ?)", (link, ch_id)); conn.commit(); conn.close()
-
-def get_channels():
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("SELECT * FROM channels"); return cur.fetchall()
-
-def del_channel_db(ch_id):
-    conn = sqlite3.connect("bot.db"); cur = conn.cursor()
-    cur.execute("DELETE FROM channels WHERE id = ?", (ch_id,)); conn.commit(); conn.close()
-
-# --- STATES ---
-class AdminState(StatesGroup):
-    add_channel = State()
-    broadcast_text = State()
-    broadcast_timer = State() # Vaqtinchalik reklama vaqti
-
-# --- FUNKSIYALAR ---
-async def check_sub_status(bot: Bot, user_id: int):
-    if user_id == ADMIN_ID: return True
-    channels = get_channels()
-    if not channels: return True
-    not_sub = []
-    for link, ch_id in channels:
-        try:
-            member = await bot.get_chat_member(chat_id=ch_id, user_id=user_id)
-            if member.status in ['left', 'kicked']: not_sub.append(link)
-        except: continue
-    return not_sub
-
-async def generate_image(prompt):
-    """Pollinations AI orqali rasm chizish"""
-    seed = random.randint(1, 10000)
-    safe_prompt = prompt.replace(" ", "%20")
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed={seed}&nologo=true"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200: return await resp.read()
-    return None
-
-async def delete_message_later(chat_id, message_id, delay_minutes, bot):
-    """Reklamani vaqt o'tgach o'chirib tashlash"""
-    await asyncio.sleep(delay_minutes * 60)
-    try:
-        await bot.delete_message(chat_id, message_id)
-    except: pass
-
-# --- START & MENU ---
-@dp.message(CommandStart())
-async def start_handler(message: Message, bot: Bot):
-    add_user(message.from_user.id)
+    base = sqlite3.connect('super_bot.db')
+    cur = base.cursor()
     
-    # Obuna tekshiruvi
-    not_sub = await check_sub_status(bot, message.from_user.id)
-    if not_sub and not isinstance(not_sub, bool):
-        kb = [[InlineKeyboardButton(text="➕ A'zo bo'lish", url=link)] for link in not_sub]
-        kb.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_sub")])
-        await message.answer("⚠️ Botdan foydalanish uchun kanallarga a'zo bo'ling:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-        return
+    # 1. Foydalanuvchilar jadvali
+    base.execute('''CREATE TABLE IF NOT EXISTS users(
+        user_id INTEGER PRIMARY KEY,
+        full_name TEXT,
+        username TEXT,
+        usage_count INTEGER DEFAULT 0,
+        balance INTEGER DEFAULT 0,
+        referrer_id INTEGER DEFAULT 0
+    )''')
+    
+    # 2. Sozlamalar jadvali
+    base.execute('''CREATE TABLE IF NOT EXISTS settings(
+        id INTEGER PRIMARY KEY,
+        free_limit INTEGER DEFAULT 10,       -- Bepul limit
+        price_per_item INTEGER DEFAULT 500,  -- 1 rasm narxi
+        referral_bonus INTEGER DEFAULT 2     -- Do'stini chaqirsa nechta bepul rasm beriladi
+    )''')
+    
+    # Boshlang'ich sozlamalar
+    check = cur.execute('SELECT * FROM settings').fetchone()
+    if not check:
+        cur.execute('INSERT INTO settings (id, free_limit, price_per_item, referral_bonus) VALUES (1, 10, 500, 2)')
+    
+    base.commit()
+    return base, cur
 
+base, cur = db_start()
+
+# =========================================================================
+# 🔘 TUGMALAR (KEYBOARDS)
+# =========================================================================
+def main_menu():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn1 = KeyboardButton("🎨 RASM YASASH")
+    btn2 = KeyboardButton("👤 KABINET")
+    btn3 = KeyboardButton("💰 BALANS TOLDIRISH")
+    btn4 = KeyboardButton("🤝 DO'STLARNI TAKLIF QILISH")
+    kb.add(btn1).add(btn2, btn3).add(btn4)
+    return kb
+
+def admin_menu():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add("📊 Statistika", "⚙️ Limitni O'zgartirish")
+    kb.add("💸 Narxni O'zgartirish", "➕ Balans Berish")
+    kb.add("⬅️ Asosiy menyu")
+    return kb
+
+def payment_keyboard():
+    kb = InlineKeyboardMarkup(row_width=1)
+    btn1 = InlineKeyboardButton(text="💳 Payme orqali to'lash", callback_data="pay_payme")
+    btn2 = InlineKeyboardButton(text="🔹 Click orqali to'lash", callback_data="pay_click")
+    kb.add(btn1, btn2)
+    return kb
+
+# =========================================================================
+# 🚀 FOYDALANUVCHI QISMI (START & REFERRAL)
+# =========================================================================
+@dp.message_handler(commands=['start'])
+async def send_welcome(message: types.Message):
+    user_id = message.from_user.id
+    full_name = message.from_user.full_name
+    username = message.from_user.username
+    
+    # Referral orqali kirganini tekshirish (/start 12345)
+    args = message.get_args()
+    referrer_id = 0
+    
+    user = cur.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    
+    if not user:
+        if args and args.isdigit():
+            ref_id = int(args)
+            if ref_id != user_id: # O'zi o'zini taklif qilolmaydi
+                referrer_id = ref_id
+                # Taklif qilgan odamga bonus beramiz (Limitni kamaytiramiz = ko'proq bepul)
+                settings = cur.execute("SELECT referral_bonus FROM settings").fetchone()
+                bonus = settings[0]
+                
+                # Referrerning ishlatgan limitidan bonusni ayiramiz (yoki balansga pul berish mumkin)
+                cur.execute("UPDATE users SET usage_count = usage_count - ? WHERE user_id = ?", (bonus, referrer_id))
+                try:
+                    await bot.send_message(referrer_id, f"🎉 **TABRIKLAYMIZ!**\n\nSiz do'stingizni taklif qildingiz va sizga **{bonus} TA BEPUL RASM** qo'shildi!")
+                except:
+                    pass
+        
+        cur.execute("INSERT INTO users (user_id, full_name, username, referrer_id) VALUES (?, ?, ?, ?)", 
+                    (user_id, full_name, username, referrer_id))
+        base.commit()
+    
     await message.answer(
-        f"👋 Salom <b>{message.from_user.full_name}</b>!\n\n"
-        "🤖 <b>Men Super AI botman.</b> Nimalar qilaman?\n"
-        "1. 💬 Savollarga javob beraman (Gemini).\n"
-        "2. 📷 Rasmlarni tahlil qilaman (Rasmni menga yuboring).\n"
-        "3. 🎨 Rasm chizaman (<code>/img olma</code> deb yozing).\n\n"
-        "<i>Savolingizni yozib qoldiring!</i>"
+        f"👋 **SALOM, {full_name.upper()}!**\n\n"
+        "MEN SUN'IY INTELLEKT ORQALI RASM YARATIB BERUVCHI BOTMAN.\n\n"
+        "🔽 **QUYIDAGI TUGMALARDAN FOYDALANING:**",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
     )
 
-@dp.callback_query(F.data == "check_sub")
-async def check_cb(c: CallbackQuery, bot: Bot):
-    ns = await check_sub_status(bot, c.from_user.id)
-    if not ns or isinstance(ns, bool):
-        await c.message.delete()
-        await c.message.answer("✅ Rahmat! Xizmatdan foydalanishingiz mumkin.")
-    else: await c.answer("❌ Hali a'zo bo'lmadingiz!", show_alert=True)
-
-# --- GEMINI CHAT & RASM TAHLILI ---
-@dp.message(F.photo)
-async def analyze_photo(message: Message, bot: Bot):
-    msg = await message.reply("👀 Rasm tahlil qilinmoqda...")
-    try:
-        # Rasmni yuklab olish
-        photo = await bot.download(message.photo[-1])
-        img = Image.open(photo)
+# =========================================================================
+# 🎨 RASM YASASH LOGIKASI (ENG MUHIM QISM)
+# =========================================================================
+@dp.message_handler(text="🎨 RASM YASASH")
+async def generate_image_logic(message: types.Message):
+    user_id = message.from_user.id
+    
+    # Sozlamalarni olish
+    settings = cur.execute("SELECT free_limit, price_per_item FROM settings").fetchone()
+    free_limit = settings[0]
+    price = settings[1]
+    
+    # Userni tekshirish
+    user = cur.execute("SELECT usage_count, balance FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    usage_count = user[0]
+    balance = user[1]
+    
+    # --- TEKSHIRUV ---
+    if usage_count < free_limit:
+        # BEPUL REJIM
+        await message.answer("🎨 **RASM TAYYORLANMOQDA...**\n\n⏳ Iltimos kuting...", parse_mode="Markdown")
         
-        # Geminiga yuborish
-        response = model.generate_content(["Bu rasmda nima borligini batafsil tasvirlab ber (O'zbek tilida).", img])
-        await msg.edit_text(response.text)
-    except Exception as e:
-        await msg.edit_text(f"❌ Xatolik: {e}")
-
-@dp.message(F.text.startswith("/img"))
-async def image_gen_cmd(message: Message):
-    prompt = message.text.replace("/img", "").strip()
-    if not prompt:
-        await message.reply("🎨 Rasm chizish uchun buyruqdan so'ng matn yozing.\nMasalan: <code>/img uchar mashina</code>")
-        return
-    
-    msg = await message.reply("🎨 Rasm chizilmoqda...")
-    img_bytes = await generate_image(prompt)
-    if img_bytes:
-        await msg.delete()
-        await message.answer_photo(BufferedInputFile(img_bytes, "img.jpg"), caption=f"🖼 {prompt}")
-    else:
-        await msg.edit_text("❌ Rasm chizib bo'lmadi.")
-
-@dp.message(F.text)
-async def ai_chat(message: Message, bot: Bot):
-    # Admin panel komandasi
-    if message.text == "/admin" and message.from_user.id == ADMIN_ID:
-        await show_admin_panel(message)
-        return
-
-    # Chat
-    try:
-        await bot.send_chat_action(message.chat.id, "typing")
-        response = model.generate_content(message.text)
+        # ... Bu yerda AI API chaqiriladi (Dall-E, Midjourney) ...
+        # Biz hozircha rasm o'rniga fayl junatamiz yoki tekst yozamiz
+        await message.answer_photo(
+            photo="https://via.placeholder.com/500", # Test uchun rasm
+            caption=f"✅ **RASMINGIZ TAYYOR!**\n\n🎁 Sizda yana **{free_limit - usage_count - 1}** ta bepul urinish qoldi."
+        )
         
-        # Javob uzun bo'lsa bo'lib tashlaymiz
-        text = response.text
-        if len(text) > 4000:
-            for x in range(0, len(text), 4000):
-                await message.answer(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
-        else:
-            await message.answer(text, parse_mode=ParseMode.MARKDOWN)
-    except Exception as e:
-        await message.answer("⚠️ AI javob bera olmadi. Qayta urinib ko'ring.")
-
-# --- ADMIN PANEL ---
-async def show_admin_panel(message: Message):
-    users_count = len(get_all_users())
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Reklama (Doimiy)", callback_data="broad_perm"), InlineKeyboardButton(text="⏳ Reklama (Vaqtli)", callback_data="broad_temp")],
-        [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch"), InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="del_ch")],
-        [InlineKeyboardButton(text=f"📊 Statistika ({users_count})", callback_data="stat")]
-    ])
-    await message.answer("👑 <b>Admin Panel:</b>", reply_markup=kb)
-
-@dp.callback_query(F.data == "stat")
-async def stat_cb(c: CallbackQuery): await c.answer(f"Foydalanuvchilar: {len(get_all_users())}", show_alert=True)
-
-# KANAL QO'SHISH
-@dp.callback_query(F.data == "add_ch")
-async def add_ch_cb(c: CallbackQuery, state: FSMContext):
-    await c.message.answer("Kanal linkini yuboring (Bot admin bo'lishi shart):")
-    await state.set_state(AdminState.add_channel)
-
-@dp.message(AdminState.add_channel)
-async def save_ch(m: Message, state: FSMContext, bot: Bot):
-    try:
-        link = m.text
-        uname = "@" + link.split("/")[-1] if "t.me" in link and "@" not in link else link
-        chat = await bot.get_chat(uname)
-        add_channel_db(link, chat.id)
-        await m.answer("✅ Kanal qo'shildi!")
-    except: await m.answer("❌ Xatolik! Bot kanalga adminmi?")
-    await state.clear()
-
-# KANAL O'CHIRISH
-@dp.callback_query(F.data == "del_ch")
-async def del_ch_list(c: CallbackQuery):
-    kb = [[InlineKeyboardButton(text=f"❌ {x[0]}", callback_data=f"rm:{x[1]}")] for x in get_channels()]
-    if kb: await c.message.edit_text("O'chirish uchun tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    else: await c.answer("Bo'sh")
-
-@dp.callback_query(F.data.startswith("rm:"))
-async def rm_c(c: CallbackQuery): del_channel_db(c.data.split(":")[1]); await c.answer("O'chdi"); await c.message.delete()
-
-# REKLAMA
-@dp.callback_query(F.data.startswith("broad_"))
-async def broadcast_ask(c: CallbackQuery, state: FSMContext):
-    is_temp = "temp" in c.data
-    await state.update_data(is_temp=is_temp)
-    await c.message.answer("📣 Reklama postini yuboring (Rasm, video yoki matn):")
-    await state.set_state(AdminState.broadcast_text)
-
-@dp.message(AdminState.broadcast_text)
-async def broadcast_get_msg(m: Message, state: FSMContext):
-    await state.update_data(msg_id=m.message_id, from_chat=m.chat.id)
-    data = await state.get_data()
-    
-    if data.get('is_temp'):
-        await m.answer("⏳ <b>Necha daqiqadan keyin o'chsin?</b> (Raqam yozing, masalan: 5)")
-        await state.set_state(AdminState.broadcast_timer)
+        # Hisobni yangilash
+        cur.execute("UPDATE users SET usage_count = usage_count + 1 WHERE user_id = ?", (user_id,)).fetchone()
+        base.commit()
+        
+    elif balance >= price:
+        # PULLIK REJIM
+        new_balance = balance - price
+        cur.execute("UPDATE users SET balance = ?, usage_count = usage_count + 1 WHERE user_id = ?", (new_balance, user_id))
+        base.commit()
+        
+        await message.answer(f"💸 **HISOBINGIZDAN {price} SO'M YECHILDI.**\n🎨 Rasm tayyorlanmoqda...", parse_mode="Markdown")
+        
+        await message.answer_photo(
+            photo="https://via.placeholder.com/500",
+            caption=f"✅ **RASMINGIZ TAYYOR!**\n\n💰 Balansingiz: **{new_balance} so'm**"
+        )
+        
     else:
-        # Doimiy reklama
-        await start_broadcast(m, state, 0)
+        # PUL YETMASA
+        await message.answer(
+            f"🚫 **DIQQAT! BEPUL LIMIT TUGAGAN.**\n\n"
+            f"❌ Sizning hisobingizda mablag' yetarli emas.\n"
+            f"💵 Bitta rasm narxi: **{price} so'm**\n"
+            f"💳 Sizning balansingiz: **{balance} so'm**\n\n"
+            "⬇️ **DAVOM ETISH UCHUN HISOBNI TO'LDIRING:**",
+            reply_markup=main_menu(),
+            parse_mode="Markdown"
+        )
 
-@dp.message(AdminState.broadcast_timer)
-async def broadcast_get_timer(m: Message, state: FSMContext):
+# =========================================================================
+# 👤 KABINET VA DO'STLAR
+# =========================================================================
+@dp.message_handler(text="👤 KABINET")
+async def profile_handler(message: types.Message):
+    user_id = message.from_user.id
+    user = cur.execute("SELECT usage_count, balance FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    settings = cur.execute("SELECT free_limit, price_per_item FROM settings").fetchone()
+    
+    usage = user[0]
+    balance = user[1]
+    limit = settings[0]
+    price = settings[1]
+    
+    qolgan_bepul = max(0, limit - usage)
+    
+    text = (
+        f"👤 **SIZNING KABINETINGIZ**\n\n"
+        f"🆔 ID: `{user_id}`\n"
+        f"💰 Balans: **{balance} so'm**\n"
+        f"🎁 Bepul urinishlar: **{qolgan_bepul} ta**\n"
+        f"🏷 Har bir rasm narxi: **{price} so'm**\n\n"
+        f"📊 Jami yasalgan rasmlar: **{usage} ta**"
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+@dp.message_handler(text="🤝 DO'STLARNI TAKLIF QILISH")
+async def referral_handler(message: types.Message):
+    user_id = message.from_user.id
+    bot_username = (await bot.get_me()).username
+    ref_link = f"https://t.me/{bot_username}?start={user_id}"
+    
+    settings = cur.execute("SELECT referral_bonus FROM settings").fetchone()
+    bonus = settings[0]
+    
+    text = (
+        f"🔗 **DO'STLARNI TAKLIF QILING!**\n\n"
+        f"Sizning shaxsiy havolangiz:\n`{ref_link}`\n\n"
+        f"Har bir taklif qilgan do'stingiz uchun **{bonus} TA BEPUL RASM** oling!"
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+# =========================================================================
+# 💰 BALANS TO'LDIRISH (CLICK / PAYME)
+# =========================================================================
+@dp.message_handler(text="💰 BALANS TOLDIRISH")
+async def deposit_handler(message: types.Message):
+    await message.answer("💳 **TO'LOV TIZIMINI TANLANG:**", reply_markup=payment_keyboard(), parse_mode="Markdown")
+
+# Invoice jo'natish (Test yoki Haqiqiy)
+@dp.callback_query_handler(lambda c: c.data in ['pay_payme', 'pay_click'])
+async def process_payment(callback_query: types.CallbackQuery):
+    amount = 5000 * 100 # 5000 so'm (tiyinda ko'rsatiladi)
+    
+    if callback_query.data == 'pay_payme':
+        provider_token = PAYME_TOKEN
+        title = "Payme orqali to'lov"
+    else:
+        provider_token = CLICK_TOKEN
+        title = "Click orqali to'lov"
+        
+    if provider_token == "PAYME_TOKEN_YOKI_TEST" or provider_token == "CLICK_TOKEN_YOKI_TEST":
+        await bot.send_message(callback_query.from_user.id, "⚠️ **ADMIN DIQQATIGA:**\nTokenlar kiritilmagan. Kodni tekshiring.")
+        return
+
+    await bot.send_invoice(
+        callback_query.from_user.id,
+        title="Balans to'ldirish",
+        description="Bot hisobini 5000 so'mga to'ldirish",
+        provider_token=provider_token,
+        currency='UZS',
+        prices=[types.LabeledPrice(label='Balans', amount=amount)],
+        payload='balance_topup'
+    )
+
+# To'lov muvaffaqiyatli o'tganda
+@dp.pre_checkout_query_handler(lambda query: True)
+async def checkout(pre_checkout_query: types.PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message_handler(content_types=ContentType.SUCCESSFUL_PAYMENT)
+async def got_payment(message: types.Message):
+    user_id = message.from_user.id
+    amount = message.successful_payment.total_amount // 100 # Tiyinni so'mga aylantirish
+    
+    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
+    base.commit()
+    
+    await message.answer(
+        f"✅ **TO'LOV QABUL QILINDI!**\n\n"
+        f"Hisobingizga **{amount} so'm** qo'shildi."
+    )
+
+# =========================================================================
+# 👮‍♂️ ADMIN PANEL (FAQAT SIZ UCHUN)
+# =========================================================================
+@dp.message_handler(commands=['admin'], user_id=ADMIN_ID)
+async def admin_start(message: types.Message):
+    await message.answer("👨‍💻 **ADMIN PANELGA XUSH KELIBSIZ!**", reply_markup=admin_menu(), parse_mode="Markdown")
+
+@dp.message_handler(text="⬅️ Asosiy menyu", user_id=ADMIN_ID)
+async def back_home(message: types.Message):
+    await message.answer("Bosh menyu", reply_markup=main_menu())
+
+@dp.message_handler(text="📊 Statistika", user_id=ADMIN_ID)
+async def admin_stats(message: types.Message):
+    users_count = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_generated = cur.execute("SELECT SUM(usage_count) FROM users").fetchone()[0] or 0
+    total_money = cur.execute("SELECT SUM(balance) FROM users").fetchone()[0] or 0
+    
+    await message.answer(
+        f"📊 **STATISTIKA:**\n\n"
+        f"👥 Foydalanuvchilar: **{users_count} ta**\n"
+        f"🖼 Jami yasalgan rasmlar: **{total_generated} ta**\n"
+        f"💰 Foydalanuvchilar balansidagi pul: **{total_money} so'm**",
+        parse_mode="Markdown"
+    )
+
+# Limit va Narxni o'zgartirish buyruqlari
+@dp.message_handler(commands=['set_limit'], user_id=ADMIN_ID)
+async def set_limit(message: types.Message):
     try:
-        minutes = int(m.text)
-        await start_broadcast(m, state, minutes)
-    except: await m.answer("❌ Faqat raqam yozing!")
+        limit = int(message.get_args())
+        cur.execute("UPDATE settings SET free_limit = ? WHERE id = 1", (limit,))
+        base.commit()
+        await message.answer(f"✅ Bepul limit **{limit} ta** qilib belgilandi.")
+    except:
+        await message.answer("⚠️ Xato! Yozish tartibi: `/set_limit 15`")
 
-async def start_broadcast(m: Message, state: FSMContext, minutes: int):
-    data = await state.get_data()
-    users = get_all_users()
-    msg_id = data['msg_id']
-    from_chat = data['from_chat']
-    bot = m.bot
-    
-    status_msg = await m.answer(f"🚀 Reklama ketmoqda... ({len(users)} kishi)")
-    count = 0
-    
-    for uid in users:
-        try:
-            sent = await bot.copy_message(chat_id=uid, from_chat_id=from_chat, message_id=msg_id)
-            count += 1
-            # Agar vaqtinchalik bo'lsa, o'chirish vazifasini belgilaymiz
-            if minutes > 0:
-                asyncio.create_task(delete_message_later(uid, sent.message_id, minutes, bot))
-            await asyncio.sleep(0.05)
-        except: pass
-    
-    await status_msg.edit_text(f"✅ Reklama tugadi. {count} kishiga bordi.\n" + (f"⏳ {minutes} daqiqadan keyin o'chadi." if minutes > 0 else ""))
-    await state.clear()
+@dp.message_handler(commands=['set_price'], user_id=ADMIN_ID)
+async def set_price(message: types.Message):
+    try:
+        price = int(message.get_args())
+        cur.execute("UPDATE settings SET price_per_item = ? WHERE id = 1", (price,))
+        base.commit()
+        await message.answer(f"✅ Bir rasm narxi **{price} so'm** qilib belgilandi.")
+    except:
+        await message.answer("⚠️ Xato! Yozish tartibi: `/set_price 1000`")
 
-# --- SERVER ---
-async def health(r): return web.Response(text="OK")
-async def web_start():
-    app = web.Application(); app.router.add_get('/', health)
-    runner = web.AppRunner(app); await runner.setup()
-    await web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 8080))).start()
+@dp.message_handler(commands=['add_money'], user_id=ADMIN_ID)
+async def add_money_admin(message: types.Message):
+    # Tartib: /add_money ID SUMMA
+    try:
+        args = message.get_args().split()
+        target_id = int(args[0])
+        amount = int(args[1])
+        
+        cur.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, target_id))
+        base.commit()
+        await message.answer(f"✅ {target_id} ga **{amount} so'm** qo'shildi.")
+        await bot.send_message(target_id, f"🎁 **ADMIN SIZGA {amount} SO'M BONUS BERDI!**")
+    except:
+        await message.answer("⚠️ Xato! Yozish tartibi: `/add_money 12345678 10000`")
 
-async def main():
-    db_start()
-    if not TOKEN: return
-    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    await asyncio.gather(dp.start_polling(bot), web_start())
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    asyncio.run(main())
+# =========================================================================
+# 🏁 BOTNI ISHGA TUSHIRISH
+# =========================================================================
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
