@@ -10,9 +10,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 import yt_dlp
 
-# --- SOZLAMALAR ---
-BOT_TOKEN = "8162216400:AAH-zzA8Fq0rAJKWW6B6nu-rz8uu3KmT4Ng" # @BotFather dan olingan token
-ADMIN_ID = 7950261926  # O'zingizning Telegram ID raqamingiz (userinfobot dan oling)
+# --- SOZLAMALAR (O'ZINGIZNIKIGA ALMASHTIRING) ---
+BOT_TOKEN = "SIZNING_BOT_TOKENINGIZ_SHU_YERGA" 
+ADMIN_ID = 123456789  # O'zingizning ID raqamingiz
 
 # --- DASTUR ---
 bot = Bot(token=BOT_TOKEN)
@@ -24,7 +24,6 @@ DB_NAME = "bot_database.db"
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        # Foydalanuvchilar jadvali
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
@@ -32,7 +31,6 @@ async def init_db():
                 full_name TEXT
             )
         """)
-        # Majburiy obuna kanallari jadvali
         await db.execute("""
             CREATE TABLE IF NOT EXISTS channels (
                 id INTEGER PRIMARY KEY,
@@ -79,7 +77,6 @@ class AdminState(StatesGroup):
     broadcast = State()
     add_channel_id = State()
     add_channel_url = State()
-    del_channel = State()
 
 # --- TEKSHIRUV FUNKSIYASI ---
 async def check_sub(user_id):
@@ -91,7 +88,6 @@ async def check_sub(user_id):
             if status.status in ['left', 'kicked']:
                 not_subscribed.append((ch_id, ch_url))
         except:
-            # Agar bot kanal admini bo'lmasa, xatolik beradi
             continue
     return not_subscribed
 
@@ -102,12 +98,9 @@ async def admin_panel(message: types.Message):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📊 Statistika", callback_data="stat")],
             [InlineKeyboardButton(text="📢 Reklama yuborish", callback_data="broadcast")],
-            [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch"),
-             InlineKeyboardButton(text="➖ Kanal o'chirish", callback_data="del_ch")]
+            [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_ch")]
         ])
         await message.answer("👨‍💻 Admin Panelga xush kelibsiz:", reply_markup=kb)
-    else:
-        await message.answer("Siz admin emassiz.")
 
 @dp.callback_query(F.data == "stat")
 async def show_stats(callback: types.CallbackQuery):
@@ -129,64 +122,59 @@ async def send_broadcast(message: types.Message, state: FSMContext):
         try:
             await message.copy_to(chat_id=user[0])
             count += 1
-            await asyncio.sleep(0.05) # Spamdan saqlanish
+            await asyncio.sleep(0.05)
         except:
             pass
     await message.answer(f"✅ Reklama {count} ta odamga yetib bordi.")
     await state.clear()
 
-# --- KANAL QO'SHISH TIZIMI ---
 @dp.callback_query(F.data == "add_ch")
 async def ask_channel_id(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Kanal ID sini yuboring (Masalan: -100123456789): \n\n⚠️ Bot kanalda Admin bo'lishi shart!")
+    await callback.message.answer("Kanal ID sini yuboring (Masalan: -100123456789):")
     await state.set_state(AdminState.add_channel_id)
 
 @dp.message(AdminState.add_channel_id)
 async def ask_channel_url(message: types.Message, state: FSMContext):
     await state.update_data(ch_id=message.text)
-    await message.answer("Kanal havolasini yuboring (Masalan: https://t.me/kanalim):")
+    await message.answer("Kanal havolasini yuboring (URL):")
     await state.set_state(AdminState.add_channel_url)
 
 @dp.message(AdminState.add_channel_url)
 async def save_channel(message: types.Message, state: FSMContext):
     data = await state.get_data()
     ch_id = data.get("ch_id")
-    ch_url = message.text
-    if await add_channel_db(ch_id, ch_url):
-        await message.answer("✅ Kanal muvaffaqiyatli qo'shildi!")
+    if await add_channel_db(ch_id, message.text):
+        await message.answer("✅ Kanal qo'shildi!")
     else:
-        await message.answer("❌ Xatolik! Bu kanal oldin qo'shilgan bo'lishi mumkin.")
+        await message.answer("❌ Xatolik!")
     await state.clear()
 
 # --- USER HANDLERS ---
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
     await add_user(message.from_user.id, message.from_user.full_name)
-    
-    # Obunani tekshirish
     not_sub = await check_sub(message.from_user.id)
     if not_sub:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Obuna bo'lish", url=url)] for _, url in not_sub
         ])
         kb.inline_keyboard.append([InlineKeyboardButton(text="✅ Tekshirish", callback_data="check_sub")])
-        await message.answer("⚠️ Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:", reply_markup=kb)
+        await message.answer("⚠️ Botdan foydalanish uchun kanallarga a'zo bo'ling:", reply_markup=kb)
     else:
         await message.answer("👋 Salom! Menga Instagram, TikTok yoki YouTube linkini yuboring.")
 
 @dp.callback_query(F.data == "check_sub")
 async def check_subscription_btn(callback: types.CallbackQuery):
-    not_sub = await check_sub(callback.from_user.id)
-    if not not_sub:
+    if not await check_sub(callback.from_user.id):
         await callback.message.delete()
-        await callback.message.answer("✅ Rahmat! Endi link yuborishingiz mumkin.")
+        await callback.message.answer("✅ Rahmat! Link yuborishingiz mumkin.")
     else:
-        await callback.answer("❌ Hali hamma kanalga a'zo bo'lmadingiz!", show_alert=True)
+        await callback.answer("❌ Hali a'zo bo'lmadingiz!", show_alert=True)
 
-# --- DOWNLOADER MANTIQI ---
+# --- DOWNLOADER MANTIQI (YANGILANGAN) ---
 @dp.message(F.text)
 async def download_video(message: types.Message):
-    # Obunani qayta tekshirish
+    # 1. Obuna tekshiruvi
     if await check_sub(message.from_user.id):
         await message.answer("Iltimos, avval kanallarga a'zo bo'ling! /start ni bosing.")
         return
@@ -196,32 +184,46 @@ async def download_video(message: types.Message):
         await message.answer("❌ Iltimos, to'g'ri havola yuboring.")
         return
 
-    wait_msg = await message.answer("⏳ Video yuklanmoqda... Iltimos kuting.")
+    wait_msg = await message.answer("⏳ Video yuklanmoqda... (10-15 soniya)")
     
     try:
+        # 2. ENG MUHIM JOYi: Cookies va Sozlamalar
         ydl_opts = {
             'outtmpl': 'downloads/%(id)s.%(ext)s',
-            'format': 'best[ext=mp4]', # Faqat MP4
-            'max_filesize': 50 * 1024 * 1024, # 50MB dan katta videolarni olmaslik (Telegram limiti)
+            'format': 'best[ext=mp4]/best',  # Sifatli MP4
+            'max_filesize': 50 * 1024 * 1024, # 50MB limit
+            'cookiefile': 'cookies.txt',      # 🍪 COOKIES FAYLI
+            'noplaylist': True,               # Pleylistlarni yuklamaslik
+            'http_headers': {                 # Odamdek ko'rinish uchun
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            }
         }
         
+        filename = None
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
         
-        # Videoni yuborish
+        # 3. Videoni yuborish
         video_file = FSInputFile(filename)
-        await message.answer_video(video_file, caption="🤖 @SizningBotingizUseri orqali yuklandi")
+        await message.answer_video(video_file, caption="✅ @SizningBotingizUseri")
         
-        # Faylni o'chirish (Xotirani to'ldirmaslik uchun)
-        os.remove(filename)
+        # 4. Tozalash
+        if filename and os.path.exists(filename):
+            os.remove(filename)
         await wait_msg.delete()
         
     except Exception as e:
-        await wait_msg.edit_text(f"❌ Kechirasiz, bu videoni yuklab bo'lmadi.\nSabab: {e}")
-        if os.path.exists('downloads'): # Tozalash
-             for f in os.listdir('downloads'):
-                 os.remove(os.path.join('downloads', f))
+        error_text = str(e)
+        if "Too Many Requests" in error_text:
+             await wait_msg.edit_text("⚠️ Server band. 1 daqiqadan keyin urinib ko'ring.")
+        elif "Sign in" in error_text:
+             await wait_msg.edit_text("⚠️ Bu videoni yuklab bo'lmadi (Yopiq video).")
+        else:
+             await wait_msg.edit_text(f"❌ Xatolik yuz berdi. Linkni tekshiring.")
+             # Xatolik faylini o'chirish
+             if filename and os.path.exists(filename):
+                os.remove(filename)
 
 # --- MAIN LOOP ---
 async def main():
