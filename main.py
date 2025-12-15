@@ -11,8 +11,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFil
 import yt_dlp
 
 # --- SOZLAMALAR (O'ZINGIZNIKIGA ALMASHTIRING) ---
-BOT_TOKEN = "SIZNING_BOT_TOKENINGIZ_SHU_YERGA" 
-ADMIN_ID = 123456789  # O'zingizning ID raqamingiz
+BOT_TOKEN = "8162216400:AAH-zzA8Fq0rAJKWW6B6nu-rz8uu3KmT4Ng" 
+ADMIN_ID = 7950261926  # O'zingizning ID raqamingiz
 
 # --- DASTUR ---
 bot = Bot(token=BOT_TOKEN)
@@ -237,3 +237,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot to'xtatildi")
+
